@@ -112,6 +112,12 @@ object Prefs {
     var dlnaLocation: String
         get() = sp.getString("dlnaLocation", "")!!
         set(v) = sp.edit().putString("dlnaLocation", v).apply()
+    var tvCastHost: String
+        get() = sp.getString("tvCastHost", "")!!
+        set(v) = sp.edit().putString("tvCastHost", v).apply()
+    var tvCastPort: Int
+        get() = sp.getInt("tvCastPort", 8009)
+        set(v) = sp.edit().putInt("tvCastPort", v).apply()
     /** 재생할 때 맞출 음량 (0~100, 1단위) */
     var dlnaVolume: Int
         get() = sp.getInt("dlnaVolume", 12)

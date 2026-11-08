@@ -94,19 +94,21 @@ object Player {
     fun fadeOutAndStop() {
         generation.incrementAndGet()
         val c = activeCast
-        val d = activeDlna
+        val tv = activeTvCast
         val startCast = Prefs.castVolume
         val startDlna = Prefs.dlnaVolume
         for (i in 1..5) {
             val k = 1.0 - i / 5.0
             try { c?.setVolume(startCast * k) } catch (_: Exception) {}
-            try { d?.let { DlnaClient.setVolume(it, (startDlna * k).toInt()) } } catch (_: Exception) {}
+            try { tv?.setVolume(startDlna * k / 100.0) } catch (_: Exception) {}
             Thread.sleep(200)
         }
         stopDevices()
         // 다음 대사를 위해 음량은 되돌리지 않음 (원래 음량은 계속 기억)
         try { activeCast?.close() } catch (_: Exception) {}
+        try { activeTvCast?.close() } catch (_: Exception) {}
         activeCast = null
+        activeTvCast = null
         playing = false
     }
 
@@ -119,8 +121,15 @@ object Player {
             } catch (e: Exception) { AppLog.d("스피커 정지 실패: ${e.message}") }
         }
         if (useDlna()) {
-            try { (activeDlna ?: dlnaDesc(App.instance))?.let { DlnaClient.stop(it) } }
-            catch (e: Exception) { AppLog.d("스탠바이미 정지 실패: ${e.message}") }
+            try { activeDlna?.let { DlnaClient.stop(it) } } catch (_: Exception) {}
+            try {
+                val tv = activeTvCast
+                if (tv != null) tv.stopApp()
+                else connectTvCast(App.instance)?.let { it.stopApp(); it.close() }
+            } catch (e: Exception) { AppLog.d("스탠바이미 정지 실패: ${e.message}") }
+            if (activeDlna == null && !preferTvCast) {
+                try { dlnaDesc(App.instance)?.let { DlnaClient.stop(it) } } catch (_: Exception) {}
+            }
         }
     }
 
@@ -131,13 +140,19 @@ object Player {
                 AppLog.d("스피커 음량 되돌림 → ${"%.2f".format(v)}")
             }
             savedDlna?.let { v ->
-                try { (activeDlna ?: dlnaDesc(App.instance))?.let { DlnaClient.setVolume(it, v) } } catch (_: Exception) {}
+                try {
+                    val tv = activeTvCast
+                    if (tv != null) tv.setVolume(v / 100.0)
+                    else connectTvCast(App.instance)?.let { it.setVolume(v / 100.0); it.close() }
+                } catch (_: Exception) {}
                 AppLog.d("스탠바이미 음량 되돌림 → $v")
             }
         }
         if (restore) { savedCast = null; savedDlna = null }
         try { activeCast?.close() } catch (_: Exception) {}
+        try { activeTvCast?.close() } catch (_: Exception) {}
         activeCast = null
+        activeTvCast = null
         activeDlna = null
         playing = false
         playingTitle = ""
@@ -158,15 +173,54 @@ object Player {
         return c.load(url, title)
     }
 
+    /** 스탠바이미: DLNA로 먼저 시도하고, 안 되면 TV의 캐스트 기능으로 재생 */
     private fun startDlna(ctx: Context, url: String, title: String, remoteOrig: Int?): Boolean {
-        val d = dlnaDesc(ctx) ?: return false
-        activeDlna = d
+        // 음량은 TV 캐스트 연결로 맞춤 (DLNA 음량 조절을 막아 둔 TV가 있음)
+        val tv = connectTvCast(ctx)
         try {
-            val v = DlnaClient.getVolume(d)
-            if (v != null && savedDlna == null) savedDlna = remoteOrig?.takeIf { it >= 0 } ?: v
-            DlnaClient.setVolume(d, Prefs.dlnaVolume)
+            val v = tv?.getVolume()
+            AppLog.d("스탠바이미 음량 읽기(캐스트): ${v?.level ?: "응답 없음"}")
+            if (v != null) {
+                if (savedDlna == null) savedDlna = remoteOrig?.takeIf { it >= 0 } ?: Math.round(v.level * 100).toInt()
+                tv?.setVolume(Prefs.dlnaVolume / 100.0)
+            }
         } catch (e: Exception) { AppLog.d("스탠바이미 음량 조절 실패: ${e.message}") }
-        return DlnaClient.play(d, url, title)
+        try { activeTvCast?.close() } catch (_: Exception) {}
+        activeTvCast = tv
+
+        if (!preferTvCast) {
+            val d = dlnaDesc(ctx)
+            if (d != null) {
+                activeDlna = d
+                try {
+                    if (DlnaClient.play(d, url, title)) { AppLog.d("스탠바이미: DLNA로 재생"); return true }
+                } catch (e: Exception) { AppLog.d("스탠바이미 DLNA 재생 실패: ${e.message} → 캐스트로 시도") }
+                activeDlna = null
+            }
+        }
+        val c = tv ?: return false
+        val ok = c.load(url, title)
+        if (ok) { preferTvCast = true; AppLog.d("스탠바이미: 캐스트로 재생") }
+        return ok
+    }
+
+    /** DLNA가 한 번 실패하면 이후엔 바로 캐스트로 (앱을 다시 켜면 초기화) */
+    @Volatile private var preferTvCast = false
+    @Volatile private var activeTvCast: CastClient? = null
+
+    fun connectTvCast(ctx: Context): CastClient? {
+        if (Prefs.tvCastHost.isNotEmpty()) {
+            try { return CastClient.connect(Prefs.tvCastHost, Prefs.tvCastPort) } catch (e: Exception) {
+                AppLog.d("저장된 TV 캐스트 주소 연결 실패, 다시 찾는 중: ${e.message}")
+            }
+        }
+        val list = Discovery.findCast(ctx, 4000)
+        val pick = list.firstOrNull { it.name.contains("webOS", true) || it.name.contains("TV", true) }
+            ?: run { AppLog.d("TV 캐스트를 찾지 못함"); return null }
+        Prefs.tvCastHost = pick.host; Prefs.tvCastPort = pick.port
+        return try { CastClient.connect(pick.host, pick.port) } catch (e: Exception) {
+            AppLog.d("TV 캐스트 연결 실패: ${e.message}"); null
+        }
     }
 
     // ---------- 기기 연결 ----------
@@ -213,7 +267,7 @@ object Player {
         if (!playing) return
         exec.execute {
             try { activeCast?.setVolume(Prefs.castVolume) } catch (_: Exception) {}
-            try { activeDlna?.let { DlnaClient.setVolume(it, Prefs.dlnaVolume) } } catch (_: Exception) {}
+            try { activeTvCast?.setVolume(Prefs.dlnaVolume / 100.0) } catch (_: Exception) {}
         }
     }
 
@@ -221,7 +275,7 @@ object Player {
     fun readDeviceVolumes(ctx: Context): Pair<CastClient.Volume?, Int?> {
         val cv = try { connectCast(ctx)?.let { c -> c.getVolume().also { c.close() } } } catch (_: Exception) { null }
         cv?.let { if (it.step > 0) Prefs.castStep = it.step }
-        val dv = try { dlnaDesc(ctx)?.let { DlnaClient.getVolume(it) } } catch (_: Exception) { null }
+        val dv = try { connectTvCast(ctx)?.let { c -> c.getVolume().also { c.close() } }?.let { Math.round(it.level * 100).toInt() } } catch (_: Exception) { null }
         return cv to dv
     }
 }
