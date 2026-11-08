@@ -145,9 +145,11 @@ object Player {
 
     private fun startCast(ctx: Context, url: String, title: String, remoteOrig: Double?): Boolean {
         val c = connectCast(ctx) ?: return false
+        AppLog.d("스피커 연결됨: ${Prefs.castName} (${Prefs.castHost})")
         try { activeCast?.close() } catch (_: Exception) {}
         activeCast = c
         val v = c.getVolume()
+        AppLog.d("스피커 음량 읽기: ${v?.level ?: "응답 없음"} (단위 ${v?.step})")
         if (v != null) {
             if (v.step > 0) Prefs.castStep = v.step
             if (savedCast == null) savedCast = remoteOrig?.takeIf { it >= 0 } ?: v.level
@@ -170,6 +172,8 @@ object Player {
     // ---------- 기기 연결 ----------
 
     fun connectCast(ctx: Context): CastClient? {
+        // 1.0.1에서 TV가 스피커로 잘못 저장된 경우 지우기
+        if (Prefs.castName.contains("webOS", true)) { Prefs.castName = ""; Prefs.castHost = "" }
         if (Prefs.castHost.isNotEmpty()) {
             try { return CastClient.connect(Prefs.castHost, Prefs.castPort) } catch (e: Exception) {
                 AppLog.d("저장된 스피커 주소 연결 실패, 다시 찾는 중: ${e.message}")
@@ -177,9 +181,12 @@ object Player {
         }
         val list = Discovery.findCast(ctx)
         val pick = list.firstOrNull { Prefs.castName.isNotEmpty() && it.name == Prefs.castName }
-            ?: list.firstOrNull { it.name.contains("S95", true) || it.name.contains("LG_Speaker", true) }
-            ?: list.firstOrNull()
-            ?: run { AppLog.d("스피커를 찾지 못함"); return null }
+            ?: list.firstOrNull { it.name.contains("S95", true) || it.name.contains("Speaker", true) || it.name.contains("사운드바") }
+            ?: list.firstOrNull { !it.name.contains("webOS", true) && !it.name.contains("TV", true) }
+            ?: run {
+                AppLog.d("스피커를 찾지 못함 (찾은 기기: ${list.joinToString { it.name }.ifEmpty { "없음" }})")
+                return null
+            }
         Prefs.castName = pick.name; Prefs.castHost = pick.host; Prefs.castPort = pick.port
         return try { CastClient.connect(pick.host, pick.port) } catch (e: Exception) {
             AppLog.d("스피커 연결 실패: ${e.message}"); null

@@ -19,7 +19,7 @@ data class DlnaDevice(val name: String, val location: String)
 /** 같은 Wi-Fi의 스피커(캐스트)와 TV(DLNA) 찾기 */
 object Discovery {
 
-    fun findCast(ctx: Context, waitMs: Long = 4000): List<CastDevice> {
+    fun findCast(ctx: Context, waitMs: Long = 6000): List<CastDevice> {
         val nsd = ctx.getSystemService(Context.NSD_SERVICE) as NsdManager
         val found = CopyOnWriteArrayList<NsdServiceInfo>()
         val listener = object : NsdManager.DiscoveryListener {
@@ -38,20 +38,28 @@ object Discovery {
             try { nsd.stopServiceDiscovery(listener) } catch (_: Exception) {}
         }
         val result = mutableListOf<CastDevice>()
-        for (s in found.distinctBy { it.serviceName }) {
+        AppLog.d("캐스트 검색 결과 ${found.size}개: ${found.joinToString { it.serviceName }}")
+        for (s in found.distinctBy { it.serviceName }) for (attempt in 1..2) {
+            if (result.any { it.name == s.serviceName }) break
             val latch = CountDownLatch(1)
+            var ok = false
             @Suppress("DEPRECATION")
             nsd.resolveService(s, object : NsdManager.ResolveListener {
-                override fun onResolveFailed(i: NsdServiceInfo, e: Int) { latch.countDown() }
+                override fun onResolveFailed(i: NsdServiceInfo, e: Int) {
+                    AppLog.d("주소 확인 실패 ${s.serviceName} (오류 $e)")
+                    latch.countDown()
+                }
                 override fun onServiceResolved(i: NsdServiceInfo) {
                     val fn = i.attributes["fn"]?.toString(Charsets.UTF_8) ?: i.serviceName
                     @Suppress("DEPRECATION")
                     val host = i.host?.hostAddress
-                    if (host != null) result += CastDevice(fn, host, i.port)
+                    if (host != null) { result += CastDevice(fn, host, i.port); ok = true }
                     latch.countDown()
                 }
             })
-            latch.await(3, TimeUnit.SECONDS)
+            latch.await(4, TimeUnit.SECONDS)
+            if (ok) break
+            Thread.sleep(300)
         }
         lock.release()
         AppLog.d("캐스트 기기: ${result.joinToString { "${it.name}@${it.host}" }}")

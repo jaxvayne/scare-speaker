@@ -51,6 +51,7 @@ class SettingsActivity : AppCompatActivity() {
         val castRow = Ui.row(c)
         castRow.addView(castLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         castRow.addView(Ui.smallButton(c, "찾기") { pickCast() })
+        castRow.addView(Ui.smallButton(c, "IP") { enterCastIp() })
         val dlnaRow = Ui.row(c)
         dlnaRow.addView(dlnaLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         dlnaRow.addView(Ui.smallButton(c, "찾기") { pickDlna() })
@@ -132,6 +133,30 @@ class SettingsActivity : AppCompatActivity() {
                     }.show()
             }
         }.start()
+    }
+
+    private fun enterCastIp() {
+        val e = edit(Prefs.castHost, "예: 192.168.1.50").apply { inputType = InputType.TYPE_CLASS_PHONE }
+        AlertDialog.Builder(this).setTitle("스피커 IP 직접 입력")
+            .setMessage("Google Home 앱 > 스피커 > 설정 > 기기 정보에서 IP 주소를 확인할 수 있어요.")
+            .setView(e)
+            .setPositiveButton("연결 확인") { _, _ ->
+                val ip = e.text.toString().trim()
+                if (ip.isEmpty()) return@setPositiveButton
+                val dlg = busy("연결 확인 중…")
+                Thread {
+                    val ok = try { CastClient.connect(ip, 8009).also { it.getVolume(); it.close() }; true }
+                    catch (ex: Exception) { AppLog.d("IP 연결 실패 $ip: ${ex.message}"); false }
+                    runOnUiThread {
+                        dlg.dismiss()
+                        if (ok) {
+                            Prefs.castHost = ip; Prefs.castPort = 8009; Prefs.castName = "직접 입력 $ip"
+                            updateDeviceLabels(); toast("연결돼요. 저장했어요")
+                        } else toast("연결하지 못했어요. IP와 스피커 전원을 확인해 주세요")
+                    }
+                }.start()
+            }
+            .setNegativeButton("취소", null).show()
     }
 
     private fun pickDlna() {

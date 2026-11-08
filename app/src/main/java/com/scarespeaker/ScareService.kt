@@ -197,6 +197,7 @@ class ScareService : Service() {
     }
 
     private fun stopListening() {
+        val was = listening || recognizer != null
         listening = false
         main.removeCallbacksAndMessages(RESTART_TOKEN)
         try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
@@ -209,7 +210,7 @@ class ScareService : Service() {
             } catch (_: Exception) {}
             mutedStreams = false
         }
-        AppLog.d("음성 인식 꺼짐")
+        if (was) AppLog.d("음성 인식 꺼짐")
     }
 
     private fun handleTexts(texts: List<String>?, final: Boolean) {
