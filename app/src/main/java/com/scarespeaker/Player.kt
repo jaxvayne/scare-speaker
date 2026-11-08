@@ -135,7 +135,7 @@ object Player {
 
     private fun finish(restore: Boolean) {
         if (restore && Prefs.restoreVolume) {
-            savedCast?.let { v ->
+            savedCast?.takeIf { it > 0.001 }?.let { v ->
                 try { (activeCast ?: connectCast(App.instance))?.setVolume(v) } catch (_: Exception) {}
                 AppLog.d("스피커 음량 되돌림 → ${"%.2f".format(v)}")
             }

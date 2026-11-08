@@ -98,7 +98,7 @@ object Prefs {
         set(v) = sp.edit().putInt("castPort", v).apply()
     /** 재생할 때 맞출 음량 (0.0~1.0) */
     var castVolume: Double
-        get() = sp.getFloat("castVolume", 0.30f).toDouble()
+        get() = sp.getFloat("castVolume", 0.12f).toDouble()
         set(v) = sp.edit().putFloat("castVolume", v.coerceIn(0.0, 1.0).toFloat()).apply()
     /** 기기가 알려주는 최소 단위 */
     var castStep: Double

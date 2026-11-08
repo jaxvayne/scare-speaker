@@ -76,11 +76,39 @@ class CastClient private constructor(private val socket: SSLSocket) {
             .put("metadata", JSONObject().put("metadataType", 0).put("title", title))
         val lr = request(NS_MEDIA, tid, JSONObject().put("type", "LOAD").put("media", media).put("autoplay", true), 15)
         AppLog.d("캐스트 LOAD 응답: ${lr?.optString("type")}")
+        lr?.optJSONArray("status")?.optJSONObject(0)?.optInt("mediaSessionId", 0)?.takeIf { it != 0 }?.let { mediaSessionId = it }
         return lr != null && lr.optString("type") != "LOAD_FAILED" && lr.optString("type") != "LOAD_CANCELLED"
     }
 
+    @Volatile private var mediaSessionId = 0
+
     /** 이 기기에서 재생 중인 기본 미디어 수신기를 멈춤 (다른 폰이 틀었어도 멈춘다) */
     fun stopApp() {
+        if (transportId == null || mediaSessionId == 0) {
+            // 다른 폰이 틀었거나 새 연결이면: 재생 중인 미디어를 찾아서 멈춤
+            try {
+                val st = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "GET_STATUS"))
+                val apps = st?.optJSONObject("status")?.optJSONArray("applications")
+                if (apps != null) for (i in 0 until apps.length()) {
+                    val a = apps.getJSONObject(i)
+                    if (a.optString("appId") == APP_ID) { transportId = a.optString("transportId"); sessionId = a.optString("sessionId") }
+                }
+                transportId?.let { t ->
+                    send(NS_CONN, t, JSONObject().put("type", "CONNECT").put("origin", JSONObject()))
+                    val ms = request(NS_MEDIA, t, JSONObject().put("type", "GET_STATUS"), 4)
+                    ms?.optJSONArray("status")?.optJSONObject(0)?.optInt("mediaSessionId", 0)?.takeIf { it != 0 }?.let { mediaSessionId = it }
+                }
+            } catch (e: Exception) { AppLog.d("캐스트 상태 확인 실패: ${e.message}") }
+        }
+        val tid = transportId
+        if (tid != null && mediaSessionId != 0) {
+            val r = request(NS_MEDIA, tid, JSONObject().put("type", "STOP").put("mediaSessionId", mediaSessionId), 4)
+            AppLog.d("캐스트 미디어 정지 응답: ${r?.optString("type") ?: "없음"}")
+        }
+        stopReceiverApp()
+    }
+
+    private fun stopReceiverApp() {
         val sid = sessionId ?: run {
             val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "GET_STATUS"))
             val apps = r?.optJSONObject("status")?.optJSONArray("applications")
@@ -91,7 +119,8 @@ class CastClient private constructor(private val socket: SSLSocket) {
             }
             found
         } ?: return
-        request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "STOP").put("sessionId", sid))
+        val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "STOP").put("sessionId", sid), 5)
+        AppLog.d("캐스트 앱 정지 응답: ${r?.optString("type") ?: "없음"}")
     }
 
     fun close() {
