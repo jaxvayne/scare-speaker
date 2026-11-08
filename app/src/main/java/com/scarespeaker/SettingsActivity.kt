@@ -89,6 +89,8 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(Ui.switch(c, "앱을 열면 음성 인식 자동 켜기", Prefs.autoListenOnOpen) { Prefs.autoListenOnOpen = it })
         root.addView(Ui.text(c, "빅스비: \"하이 빅스비, 이놈아저씨 열어줘\" → 앱이 열리며 음성 인식이 켜져요. 빅스비 빠른 명령어에 \"이놈아저씨 켜줘\" = \"이놈아저씨 열어줘\"로 등록하면 더 짧게 부를 수 있어요.", 12f))
         root.addView(Ui.text(c, "음성 인식은 ${Prefs.autoOffMin}분 동안 명령이 없으면 자동으로 꺼져요.", 12f))
+        root.addView(Ui.switch(c, "음성 인식 켤 때 기기 자동 준비", Prefs.autoPrepare) { Prefs.autoPrepare = it })
+        root.addView(Ui.text(c, "끄면 메인 화면의 '🔌 기기 준비' 버튼으로만 준비해요. (재생할 때는 항상 필요한 기기를 깨워요)", 12f))
         root.addView(Ui.spacer(c, 8))
         root.addView(Ui.switch(c, "예약 알림 켜기", Prefs.scheduleOn) { Prefs.scheduleOn = it; Schedule.apply(c) })
         val timeBtn = Ui.smallButton(c, "") {}

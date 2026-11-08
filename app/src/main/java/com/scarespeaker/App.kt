@@ -188,6 +188,11 @@ object Prefs {
         get() = sp.getBoolean("autoListenOnOpen", Rec.b("autoListenOnOpen", true))
         set(v) = sp.edit().putBoolean("autoListenOnOpen", v).apply()
 
+    /** 음성 인식 켤 때 기기 자동 준비 (끄면 '기기 준비' 버튼으로만) */
+    var autoPrepare: Boolean
+        get() = sp.getBoolean("autoPrepare", Rec.b("autoPrepare", true))
+        set(v) = sp.edit().putBoolean("autoPrepare", v).apply()
+
     /** 명령이 없으면 음성 인식 자동 꺼짐 (분) */
     var autoOffMin: Int
         get() = sp.getInt("autoOffMin", 15)
@@ -218,7 +223,7 @@ object Prefs {
         "name1", "name2", "target", "castName", "castHost", "castPort", "castVolume", "castStep",
         "dlnaName", "dlnaLocation", "tvCastHost", "tvCastPort", "dlnaVolume", "dlnaDelayMs",
         "restoreVolume", "effects", "dedupMode", "testSound", "muteBeep", "style", "ttsEngine", "ttsVoice",
-        "autoListenOnOpen", "scheduleOn", "scheduleMinute", "scheduleDays",
+        "autoListenOnOpen", "scheduleOn", "scheduleMinute", "scheduleDays", "autoPrepare",
     )
 
     fun exportJson(): org.json.JSONObject = org.json.JSONObject()
@@ -232,6 +237,7 @@ object Prefs {
         .put("testSound", testSound.name).put("muteBeep", muteBeep).put("style", style.name)
         .put("ttsEngine", ttsEngine).put("ttsVoice", ttsVoice).put("autoListenOnOpen", autoListenOnOpen)
         .put("scheduleOn", scheduleOn).put("scheduleMinute", scheduleMinute).put("scheduleDays", scheduleDays)
+        .put("autoPrepare", autoPrepare)
 
     private const val CODE_PREFIX = "이놈아저씨설정:"
 
@@ -276,6 +282,7 @@ object Prefs {
         if (has("scheduleOn")) scheduleOn = j.getBoolean("scheduleOn")
         if (has("scheduleMinute")) scheduleMinute = j.getInt("scheduleMinute")
         if (has("scheduleDays")) scheduleDays = j.getInt("scheduleDays")
+        if (has("autoPrepare")) autoPrepare = j.getBoolean("autoPrepare")
     }
 
     /** 추천 설정으로 맞추기: 공유 설정을 지워서 앱에 들어 있는 추천값을 쓰게 함 */

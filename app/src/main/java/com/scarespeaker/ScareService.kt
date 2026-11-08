@@ -60,7 +60,7 @@ class ScareService : Service() {
             ACTION_LISTEN_ON -> {
                 if (!listening) {
                     listening = true; goForeground(); startListening()
-                    prepare() // 음성 인식 켤 때 기기 자동 준비
+                    if (Prefs.autoPrepare) prepare() // 음성 인식 켤 때 기기 자동 준비
                 }
                 touchActivity()
             }
