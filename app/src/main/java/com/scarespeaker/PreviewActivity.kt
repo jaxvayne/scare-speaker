@@ -37,7 +37,7 @@ class PreviewActivity : AppCompatActivity() {
         vr.addView(Ui.smallButton(c, "엔진 고르기") { pickEngine() }, LinearLayout.LayoutParams(0, Ui.dp(c, 48), 1f).apply { rightMargin = Ui.dp(c, 6) })
         vr.addView(Ui.smallButton(c, "음성 고르기") { pickVoice() }, LinearLayout.LayoutParams(0, Ui.dp(c, 48), 1f))
         root.addView(vr)
-        root.addView(Ui.text(c, "남성 음성이 있으면 고르는 걸 추천해요. 고른 뒤 샘플로 들어 보세요.", 12f))
+        root.addView(Ui.text(c, "추천: 남성 1 · 온라인. 고른 뒤 샘플로 들어 보세요.", 12f))
         root.addView(Ui.spacer(c, 8))
         root.addView(Ui.bigButton(c, "🔊 샘플 듣기 (지금 고른 스타일)", Ui.GREEN, 56) { playSample() })
         root.addView(Ui.bigButton(c, "✅ 이 목소리로 모든 대사 다시 만들기", Ui.RED, 56) { regenerate() })

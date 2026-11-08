@@ -174,7 +174,7 @@ object Prefs {
         set(v) = sp.edit().putString("clipsSig", v).apply()
 
     var style: Style
-        get() = try { Style.valueOf(sp.getString("style", Rec.s("style", Style.BIG.name))!!) } catch (_: Exception) { Style.BIG }
+        get() = try { Style.valueOf(sp.getString("style", Rec.s("style", Style.GIANT.name))!!) } catch (_: Exception) { Style.GIANT }
         set(v) = sp.edit().putString("style", v.name).apply()
     var ttsEngine: String
         get() = sp.getString("ttsEngine", Rec.s("ttsEngine", ""))!!

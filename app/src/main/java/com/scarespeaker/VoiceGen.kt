@@ -19,11 +19,9 @@ enum class Style(
     val reverbMix: Double, val reverbSize: Double,
     val lowpassHz: Double, val echo: Double,
 ) {
-    BIG("굵은 아저씨", 0.85f, 1.05f, 0.84, 0.8, 1.6, 0.0, 0.30, 1.0, 0.0, 0.0),
-    GIANT("덩치 큰 거인", 0.80f, 1.20f, 0.72, 1.2, 2.2, 0.12, 0.40, 1.4, 0.0, 0.0),
-    FAR("복도 끝 울림", 0.85f, 1.05f, 0.80, 0.6, 1.3, 0.0, 0.55, 1.8, 3000.0, 0.30),
-    GROWL("으르렁 괴물", 0.80f, 1.10f, 0.78, 1.0, 3.5, 0.32, 0.30, 1.1, 0.0, 0.0),
-    OLD("예전 방식", 0.55f, 0.82f, 1.0, 0.0, 1.0, 0.0, 0.32, 1.0, 0.0, 0.0),
+    GIANT("덩치 큰 거인 (추천)", 0.80f, 1.20f, 0.72, 1.2, 2.2, 0.12, 0.40, 1.4, 0.0, 0.0),
+    FAR("거인 + 복도 끝 울림", 0.80f, 1.20f, 0.72, 1.0, 1.8, 0.0, 0.55, 1.8, 3000.0, 0.30),
+    GROWL("거인 + 으르렁", 0.80f, 1.20f, 0.70, 1.2, 3.5, 0.32, 0.35, 1.2, 0.0, 0.0),
 }
 
 /** 폰 TTS로 음성 파일을 만든다. 외부 서버 없이 폰 안에서 처리. */
@@ -194,7 +192,8 @@ class ClipGenerator(private val ctx: Context) {
             return try {
                 val engines = t.engines.map { it.name to it.label }
                 val voices = try {
-                    t.voices?.filter { it.locale.language == "ko" }
+                    // 얇은(여성) 음성은 목록에서 뺌
+                    t.voices?.filter { it.locale.language == "ko" && listOf("-ism", "-kob", "-koa").none { f -> f in it.name.lowercase() } }
                         ?.sortedWith(compareBy({ it.isNetworkConnectionRequired }, { it.name }))
                         ?.map { it.name } ?: emptyList()
                 } catch (_: Exception) { emptyList() }
