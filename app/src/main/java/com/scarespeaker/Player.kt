@@ -127,7 +127,7 @@ object Player {
                 if (tv != null) tv.stopApp()
                 else connectTvCast(App.instance)?.let { it.stopApp(); it.close() }
             } catch (e: Exception) { AppLog.d("스탠바이미 정지 실패: ${e.message}") }
-            if (activeDlna == null && !preferTvCast) {
+            if (activeDlna == null) {
                 try { dlnaDesc(App.instance)?.let { DlnaClient.stop(it) } } catch (_: Exception) {}
             }
         }
@@ -188,25 +188,26 @@ object Player {
         try { activeTvCast?.close() } catch (_: Exception) {}
         activeTvCast = tv
 
-        if (!preferTvCast) {
-            val d = dlnaDesc(ctx)
-            if (d != null) {
-                activeDlna = d
-                try {
-                    if (DlnaClient.play(d, url, title)) { AppLog.d("스탠바이미: DLNA로 재생"); return true }
-                } catch (e: Exception) { AppLog.d("스탠바이미 DLNA 재생 실패: ${e.message} → 캐스트로 시도") }
-                activeDlna = null
-            }
+        // 재생은 DLNA (이 TV는 캐스트 재생 요청에 응답하지 않음)
+        val d = dlnaDesc(ctx) ?: return false
+        activeDlna = d
+        return try {
+            DlnaClient.play(d, url, title).also { if (it) AppLog.d("스탠바이미: DLNA로 재생") }
+        } catch (e: Exception) {
+            AppLog.d("스탠바이미 DLNA 재생 실패: ${e.message}")
+            activeDlna = null
+            false
         }
-        val c = tv ?: return false
-        val ok = c.load(url, title)
-        if (ok) { preferTvCast = true; AppLog.d("스탠바이미: 캐스트로 재생") }
-        return ok
     }
 
-    /** DLNA가 한 번 실패하면 이후엔 바로 캐스트로 (앱을 다시 켜면 초기화) */
-    @Volatile private var preferTvCast = false
     @Volatile private var activeTvCast: CastClient? = null
+
+    /** 이 주소가 스탠바이미인지 */
+    fun isTvHost(host: String): Boolean {
+        if (host.isEmpty()) return false
+        if (host == Prefs.tvCastHost) return true
+        return try { java.net.URL(Prefs.dlnaLocation).host == host } catch (_: Exception) { false }
+    }
 
     fun connectTvCast(ctx: Context): CastClient? {
         if (Prefs.tvCastHost.isNotEmpty()) {
@@ -227,7 +228,10 @@ object Player {
 
     fun connectCast(ctx: Context): CastClient? {
         // 1.0.1에서 TV가 스피커로 잘못 저장된 경우 지우기
-        if (Prefs.castName.contains("webOS", true)) { Prefs.castName = ""; Prefs.castHost = "" }
+        if (Prefs.castName.contains("webOS", true) || isTvHost(Prefs.castHost)) {
+            if (Prefs.castHost.isNotEmpty()) AppLog.d("스피커 주소 ${Prefs.castHost}는 스탠바이미라서 지움")
+            Prefs.castName = ""; Prefs.castHost = ""
+        }
         if (Prefs.castHost.isNotEmpty()) {
             try { return CastClient.connect(Prefs.castHost, Prefs.castPort) } catch (e: Exception) {
                 AppLog.d("저장된 스피커 주소 연결 실패, 다시 찾는 중: ${e.message}")
@@ -236,7 +240,7 @@ object Player {
         val list = Discovery.findCast(ctx)
         val pick = list.firstOrNull { Prefs.castName.isNotEmpty() && it.name == Prefs.castName }
             ?: list.firstOrNull { it.name.contains("S95", true) || it.name.contains("Speaker", true) || it.name.contains("사운드바") }
-            ?: list.firstOrNull { !it.name.contains("webOS", true) && !it.name.contains("TV", true) }
+            ?: list.firstOrNull { !it.name.contains("webOS", true) && !it.name.contains("TV", true) && !isTvHost(it.host) }
             ?: run {
                 AppLog.d("스피커를 찾지 못함 (찾은 기기: ${list.joinToString { it.name }.ifEmpty { "없음" }})")
                 return null

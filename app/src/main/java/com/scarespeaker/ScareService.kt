@@ -132,13 +132,14 @@ class ScareService : Service() {
         currentTitle = title
         notifyChanged()
         val durMs = (Wav.durationSec(file) * 1000).toLong()
-        ignoreUntil = System.currentTimeMillis() + durMs + 4000
+        ignoreUntil = System.currentTimeMillis() + 60_000
         val ok = Player.start(this, file, title, key) {
             currentTitle = ""
             ignoreUntil = System.currentTimeMillis() + 1500
             notifyChanged()
             main.post { stopIfIdle() }
         }
+        if (ok) ignoreUntil = System.currentTimeMillis() + durMs + 1500
         if (!ok) {
             currentTitle = ""
             ignoreUntil = 0

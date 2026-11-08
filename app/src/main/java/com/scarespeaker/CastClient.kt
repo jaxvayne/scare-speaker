@@ -56,7 +56,7 @@ class CastClient private constructor(private val socket: SSLSocket) {
 
     /** 기본 미디어 수신기를 띄우고 음성 파일을 재생 */
     fun load(url: String, title: String): Boolean {
-        val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "LAUNCH").put("appId", APP_ID), 20)
+        val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "LAUNCH").put("appId", APP_ID), 8)
         AppLog.d("캐스트 LAUNCH 응답: ${r?.toString()?.take(200) ?: "없음 (연결 끊김=${closed})"}")
         if (r == null) return false
         val apps = r.optJSONObject("status")?.optJSONArray("applications") ?: return false

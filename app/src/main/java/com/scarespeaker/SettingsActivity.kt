@@ -143,6 +143,7 @@ class SettingsActivity : AppCompatActivity() {
             .setPositiveButton("연결 확인") { _, _ ->
                 val ip = e.text.toString().trim()
                 if (ip.isEmpty()) return@setPositiveButton
+                if (Player.isTvHost(ip)) { toast("$ip 는 스탠바이미 주소예요. 사운드바 IP를 넣어 주세요"); return@setPositiveButton }
                 val dlg = busy("연결 확인 중…")
                 Thread {
                     val ok = try { CastClient.connect(ip, 8009).also { it.getVolume(); it.close() }; true }
