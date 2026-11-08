@@ -14,6 +14,8 @@ object DlnaClient {
 
     private val cache = HashMap<String, Desc>()
 
+    fun forget(location: String) { cache.remove(location) }
+
     fun describe(location: String): Desc? {
         cache[location]?.let { return it }
         return try {

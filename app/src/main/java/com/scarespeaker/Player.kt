@@ -189,15 +189,24 @@ object Player {
         activeTvCast = tv
 
         // 재생은 DLNA (이 TV는 캐스트 재생 요청에 응답하지 않음)
-        val d = dlnaDesc(ctx) ?: return false
-        activeDlna = d
-        return try {
-            DlnaClient.play(d, url, title).also { if (it) AppLog.d("스탠바이미: DLNA로 재생") }
-        } catch (e: Exception) {
-            AppLog.d("스탠바이미 DLNA 재생 실패: ${e.message}")
-            activeDlna = null
-            false
+        for (attempt in 1..2) {
+            val d = dlnaDesc(ctx) ?: return false
+            activeDlna = d
+            try {
+                return DlnaClient.play(d, url, title).also { if (it) AppLog.d("스탠바이미: DLNA로 재생") }
+            } catch (e: java.io.IOException) {
+                // 공유기를 껐다 켜서 TV 주소가 바뀐 경우: 다시 찾기
+                AppLog.d("스탠바이미 연결 실패(${e.message}), 주소 다시 찾는 중")
+                DlnaClient.forget(Prefs.dlnaLocation)
+                Prefs.dlnaLocation = ""
+                activeDlna = null
+            } catch (e: Exception) {
+                AppLog.d("스탠바이미 DLNA 재생 실패: ${e.message}")
+                activeDlna = null
+                return false
+            }
         }
+        return false
     }
 
     @Volatile private var activeTvCast: CastClient? = null
