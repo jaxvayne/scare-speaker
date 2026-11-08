@@ -132,10 +132,10 @@ object Dsp {
     }
 
     /** 울림(리버브) */
-    fun reverb(x: FloatArray, rate: Int, mix: Double = 0.32, tailSec: Double = 0.9): FloatArray {
-        val n = x.size + (tailSec * rate).toInt()
+    fun reverb(x: FloatArray, rate: Int, mix: Double = 0.32, tailSec: Double = 0.9, size: Double = 1.0): FloatArray {
+        val n = x.size + (tailSec * size * rate).toInt()
         val wet = DoubleArray(n)
-        val delays = doubleArrayOf(0.067, 0.089, 0.113, 0.149)
+        val delays = doubleArrayOf(0.067, 0.089, 0.113, 0.149).map { it * size }
         for (d in delays) {
             val dl = (d * rate).toInt()
             val buf = DoubleArray(n)
@@ -180,6 +180,72 @@ object Dsp {
         }
     }
 
+    /** 음높이와 목소리 울림을 함께 낮춤 (느려짐). factor<1 이면 낮아짐 */
+    fun resample(x: FloatArray, factor: Double): FloatArray {
+        if (factor >= 0.999 && factor <= 1.001) return x
+        val n = (x.size / factor).toInt()
+        val out = FloatArray(n)
+        for (i in 0 until n) {
+            val pos = i * factor
+            val k = pos.toInt()
+            val f = (pos - k).toFloat()
+            val a = x.getOrElse(k) { 0f }
+            val b = x.getOrElse(k + 1) { 0f }
+            out[i] = a + (b - a) * f
+        }
+        return out
+    }
+
+    /** 저음 보강 */
+    fun bassBoost(x: FloatArray, rate: Int, amount: Double, cutoffHz: Double = 200.0): FloatArray {
+        if (amount <= 0) return x
+        val a = 1 - exp(-2 * PI * cutoffHz / rate)
+        var lp = 0.0
+        return FloatArray(x.size) { i ->
+            lp += a * (x[i] - lp)
+            (x[i] + lp * amount).toFloat()
+        }
+    }
+
+    /** 거친 질감 (부드러운 찌그러뜨림) */
+    fun drive(x: FloatArray, k: Double): FloatArray {
+        if (k <= 1.0) return x
+        val norm = kotlin.math.tanh(k)
+        return FloatArray(x.size) { i -> (kotlin.math.tanh(x[i] * k) / norm).toFloat() }
+    }
+
+    /** 으르렁거리는 떨림 */
+    fun growl(x: FloatArray, rate: Int, depth: Double, hz: Double = 32.0): FloatArray {
+        if (depth <= 0) return x
+        return FloatArray(x.size) { i ->
+            val m = 1 - depth + depth * abs(sin(2 * PI * hz * i / rate))
+            (x[i] * m).toFloat()
+        }
+    }
+
+    /** 고음 깎기 (멀리서 들리는 느낌) */
+    fun lowpass(x: FloatArray, rate: Int, hz: Double): FloatArray {
+        if (hz <= 0) return x
+        val a = 1 - exp(-2 * PI * hz / rate)
+        var y = 0.0
+        return FloatArray(x.size) { i -> y += a * (x[i] - y); y.toFloat() }
+    }
+
+    /** 메아리 */
+    fun echo(x: FloatArray, rate: Int, amount: Double, delaySec: Double = 0.28): FloatArray {
+        if (amount <= 0) return x
+        val d = (delaySec * rate).toInt()
+        val out = FloatArray(x.size + d * 2)
+        for (i in x.indices) {
+            out[i] += x[i]
+            out[i + d] += (x[i] * amount).toFloat()
+            out[i + 2 * d] += (x[i] * amount * amount).toFloat()
+        }
+        return out
+    }
+
+    fun gain(x: FloatArray, g: Double): FloatArray { for (i in x.indices) x[i] = (x[i] * g).toFloat(); return x }
+
     /** 잔잔한 음악 (약 20초) */
     fun music(rate: Int): FloatArray {
         val chords = arrayOf(
@@ -222,106 +288,3 @@ object Dsp {
     }
 }
 
-/** 폰 TTS로 음성 파일을 만든다. 외부 서버 없이 폰 안에서 처리. */
-class ClipGenerator(private val ctx: Context) {
-
-    private var tts: TextToSpeech? = null
-    private val waits = ConcurrentHashMap<String, CountDownLatch>()
-
-    private fun initTts(): TextToSpeech {
-        val latch = CountDownLatch(1)
-        var ok = false
-        val t = TextToSpeech(ctx.applicationContext) { status ->
-            ok = status == TextToSpeech.SUCCESS
-            latch.countDown()
-        }
-        latch.await(15, TimeUnit.SECONDS)
-        if (!ok) throw IllegalStateException("TTS를 시작하지 못했어요")
-        val lr = t.setLanguage(Locale.KOREAN)
-        if (lr == TextToSpeech.LANG_MISSING_DATA || lr == TextToSpeech.LANG_NOT_SUPPORTED) {
-            throw IllegalStateException("한국어 TTS 음성이 없어요 (설정 > 텍스트 음성 변환에서 한국어 음성 설치)")
-        }
-        t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String?) {}
-            override fun onDone(id: String?) { id?.let { waits.remove(it)?.countDown() } }
-            @Deprecated("deprecated") override fun onError(id: String?) { id?.let { waits.remove(it)?.countDown() } }
-            override fun onError(id: String?, errorCode: Int) { id?.let { waits.remove(it)?.countDown() } }
-        })
-        return t
-    }
-
-    private fun synth(text: String, pitch: Float, rate: Float): Pcm {
-        val t = tts ?: initTts().also { tts = it }
-        t.setPitch(pitch)
-        t.setSpeechRate(rate)
-        val f = File(ctx.cacheDir, "tts_${System.nanoTime()}.wav")
-        val id = "u${System.nanoTime()}"
-        val latch = CountDownLatch(1)
-        waits[id] = latch
-        val r = t.synthesizeToFile(text, Bundle(), f, id)
-        if (r != TextToSpeech.SUCCESS) throw IllegalStateException("TTS 변환 실패")
-        latch.await(30, TimeUnit.SECONDS)
-        if (!f.exists() || f.length() < 100) throw IllegalStateException("TTS 결과가 비어 있어요: $text")
-        val p = Wav.read(f)
-        f.delete()
-        return p
-    }
-
-    private fun scary(text: String): Pcm = synth(text, 0.55f, 0.82f)
-
-    fun generateAll(progress: (String) -> Unit) {
-        try {
-            val dir = Scenario.clipsDir(ctx)
-            val effects = Prefs.effects
-            val jobs = mutableListOf<Triple<String, String, Cmd>>()
-            for (role in Role.values()) {
-                for (cmd in listOf(Cmd.COME, Cmd.GOAWAY, Cmd.END))
-                    jobs += Triple(Scenario.clipKey(cmd, role, NameOpt.NONE), Scenario.ttsText(cmd, role, NameOpt.NONE), cmd)
-            }
-            for (opt in NameOpt.values()) {
-                for (cmd in listOf(Cmd.TAKE, Cmd.NOSLEEP))
-                    jobs += Triple(Scenario.clipKey(cmd, Role.DAD, opt), Scenario.ttsText(cmd, Role.DAD, opt), cmd)
-            }
-            val total = jobs.size + 2
-            var done = 0
-            for ((key, text, cmd) in jobs) {
-                progress("음성 만드는 중 ${++done}/$total")
-                val v = scary(text)
-                val r = v.rate
-                val body = when {
-                    effects && cmd == Cmd.COME ->
-                        Dsp.concat(Dsp.footsteps(r, true), Dsp.silence(r, 0.15), v.data)
-                    effects && (cmd == Cmd.GOAWAY || cmd == Cmd.END) ->
-                        Dsp.concat(v.data, Dsp.silence(r, 0.35), Dsp.footsteps(r, false))
-                    else -> v.data
-                }
-                val out = Dsp.normalize(Dsp.concat(Dsp.silence(r, 0.35), Dsp.reverb(body, r)))
-                Wav.write(File(dir, "$key.wav"), Pcm(out, r))
-            }
-
-            // 테스트: 숫자 세기 (1초마다 '똑' + 숫자)
-            progress("테스트 소리 만드는 중 ${++done}/$total")
-            val nums = listOf("하나", "둘", "셋", "넷", "다섯", "여섯", "일곱", "여덟", "아홉", "열")
-            val first = synth(nums[0], 1.0f, 1.0f)
-            val rate = first.rate
-            val count = FloatArray((rate * 12.0).toInt())
-            val tick = Dsp.tick(rate)
-            for ((i, w) in nums.withIndex()) {
-                val at = (rate * (0.6 + i)).toInt()
-                Dsp.mixAt(count, tick, at)
-                val v = if (i == 0) first else synth(w, 1.0f, 1.1f)
-                Dsp.mixAt(count, v.data, at + (0.06 * rate).toInt(), 0.9f)
-            }
-            Wav.write(File(dir, "test_count.wav"), Pcm(Dsp.normalize(count, 0.85f), rate))
-
-            progress("테스트 소리 만드는 중 ${++done}/$total")
-            Wav.write(File(dir, "test_music.wav"), Pcm(Dsp.normalize(Dsp.music(22050), 0.7f), 22050))
-
-            Prefs.clipsSignature = Prefs.currentSignature()
-            AppLog.d("음성 파일 생성 완료 ($total)")
-        } finally {
-            tts?.shutdown()
-            tts = null
-        }
-    }
-}

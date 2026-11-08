@@ -57,7 +57,10 @@ class ScareService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_LISTEN_ON -> { listening = true; goForeground(); startListening() }
+            ACTION_LISTEN_ON -> {
+                if (!listening) { listening = true; goForeground(); startListening() }
+                touchActivity()
+            }
             ACTION_LISTEN_OFF -> { stopListening(); goForeground(); stopIfIdle() }
             ACTION_STOP -> {
                 goForeground()
@@ -71,9 +74,10 @@ class ScareService : Service() {
             }
             ACTION_PLAY -> {
                 goForeground()
-                val cmd = Cmd.valueOf(intent.getStringExtra(EXTRA_CMD) ?: Cmd.COME.name)
-                val opt = NameOpt.valueOf(intent.getStringExtra(EXTRA_OPT) ?: NameOpt.NONE.name)
-                worker.execute { runCommand(cmd, opt, fromVoice = false) }
+                val cmd = intent.getStringExtra(EXTRA_CMD) ?: "COME"
+                val actor = Who.valueOf(intent.getStringExtra(EXTRA_ACTOR) ?: Who.NONE.name)
+                val target = Who.valueOf(intent.getStringExtra(EXTRA_TARGET) ?: Who.NONE.name)
+                worker.execute { runCommand(cmd, actor, target) }
             }
             else -> goForeground()
         }
@@ -91,18 +95,21 @@ class ScareService : Service() {
 
     // ---------------- 명령 실행 ----------------
 
-    private fun runCommand(cmd: Cmd, opt: NameOpt, fromVoice: Boolean) {
+    private fun runCommand(cmdId: String, actor: Who, target: Who) {
+        touchActivity()
         val role = Prefs.role
-        val key = Scenario.clipKey(cmd, role, opt)
+        val c = Scenario.byId(cmdId)
+        val key = if (cmdId == Scenario.TEST) Scenario.testKey()
+        else if (c != null) Scenario.clipKey(c, role, actor, target) else return
         val file = Scenario.clipFile(this, key)
         if (!file.exists()) {
             toast("음성 파일이 아직 없어요. 앱을 열어 음성 만들기를 해 주세요")
             return
         }
-        val title = if (cmd == Cmd.TEST) "테스트: ${Prefs.testSound.label}"
-        else cmd.label.replace("○○", Scenario.nameLabel(opt))
+        val stops = c?.stops == true
+        val title = if (c == null) "테스트: ${Prefs.testSound.label}" else Scenario.title(c, actor, target)
 
-        if (!cmd.stopsCurrent) {
+        if (!stops) {
             if (Dedup.isLocked(key)) {
                 AppLog.d("다른 폰에서 재생 중이라 건너뜀: $title")
                 vibrate(longArrayOf(0, 60, 80, 60))
@@ -113,7 +120,7 @@ class ScareService : Service() {
         }
 
         acquireLocks()
-        if (cmd.stopsCurrent) {
+        if (stops) {
             if (Player.playing || Dedup.remoteActive()) {
                 // 1초 동안 소리를 줄이며 멈추고, 1초 쉰 뒤 대사
                 Player.fadeOutAndStop()
@@ -122,11 +129,6 @@ class ScareService : Service() {
             }
         } else if (Player.playing) {
             Player.stop(restore = false)
-        }
-
-        if (cmd == Cmd.END && listening) {
-            // 상황 종료: 음성 인식 자동으로 끄기
-            main.post { stopListening(); notifyChanged() }
         }
 
         currentTitle = title
@@ -151,6 +153,28 @@ class ScareService : Service() {
 
     // ---------------- 음성 인식 ----------------
 
+    // ---------------- 자동 꺼짐 ----------------
+
+    @Volatile private var lastActivity = System.currentTimeMillis()
+    private val autoOffCheck = object : Runnable {
+        override fun run() {
+            if (!listening) return
+            val idleMs = System.currentTimeMillis() - lastActivity
+            if (!Player.playing && idleMs > Prefs.autoOffMin * 60_000L) {
+                AppLog.d("${Prefs.autoOffMin}분 동안 명령이 없어 음성 인식 자동 꺼짐")
+                stopListening(); notifyChanged(); stopIfIdle()
+                return
+            }
+            main.postDelayed(this, 30_000)
+        }
+    }
+
+    private fun touchActivity() {
+        lastActivity = System.currentTimeMillis()
+        if (listening) { main.removeCallbacks(autoOffCheck); main.postDelayed(autoOffCheck, 30_000) }
+        notifyChanged()
+    }
+
     private fun startListening() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             toast("마이크 권한이 필요해요"); listening = false; notifyChanged(); return
@@ -167,7 +191,10 @@ class ScareService : Service() {
             } catch (_: Exception) {}
         }
         acquireLocks()
-        AppLog.d("음성 인식 켜짐")
+        AppLog.d("음성 인식 켜짐 (${Prefs.autoOffMin}분 동안 명령 없으면 자동 꺼짐)")
+        lastActivity = System.currentTimeMillis()
+        main.removeCallbacks(autoOffCheck)
+        main.postDelayed(autoOffCheck, 30_000)
         notifyChanged()
         listenRound()
     }
@@ -200,6 +227,7 @@ class ScareService : Service() {
     private fun stopListening() {
         val was = listening || recognizer != null
         listening = false
+        main.removeCallbacks(autoOffCheck)
         main.removeCallbacksAndMessages(RESTART_TOKEN)
         try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
         recognizer = null
@@ -222,13 +250,14 @@ class ScareService : Service() {
         for (t in texts) {
             val m = Scenario.match(t, testMode) ?: continue
             // 재생 중에는 스피커 소리를 다시 알아듣지 않도록 무시 (멈춤 명령은 예외)
-            if (now < ignoreUntil && !m.cmd.stopsCurrent) return
+            val stops = Scenario.byId(m.cmd)?.stops == true
+            if (now < ignoreUntil && !stops) return
             if (now - lastTrigger < 2500) return
             handledThisRound = true
             lastTrigger = now
-            AppLog.d("인식: \"$t\" → ${m.cmd} ${m.opt}")
+            AppLog.d("인식: \"$t\" → ${m.cmd} ${m.actor}→${m.target}")
             vibrate(longArrayOf(0, 90))
-            worker.execute { runCommand(m.cmd, m.opt, fromVoice = true) }
+            worker.execute { runCommand(m.cmd, m.actor, m.target) }
             return
         }
     }
@@ -282,7 +311,11 @@ class ScareService : Service() {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         val lines = mutableListOf<String>()
-        if (listening) lines += "🎙 음성 인식 중" + if (Prefs.testMode) " · 테스트 모드" else ""
+        if (listening) {
+            val offAt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA)
+                .format(java.util.Date(lastActivity + Prefs.autoOffMin * 60_000L))
+            lines += "🎙 음성 인식 중" + (if (Prefs.testMode) " · 테스트 모드" else "") + " · $offAt 자동 꺼짐"
+        }
         if (currentTitle.isNotEmpty()) lines += "▶ 재생 중: $currentTitle"
         if (lines.isEmpty()) lines += "대기 중"
         val b = NotificationCompat.Builder(this, App.CHANNEL)
@@ -313,6 +346,7 @@ class ScareService : Service() {
                 } catch (_: Exception) {}
             }
             stateListener?.invoke()
+            ScareWidget.refresh(this)
         }
     }
 
@@ -344,7 +378,8 @@ class ScareService : Service() {
         const val ACTION_LISTEN_ON = "listen_on"
         const val ACTION_LISTEN_OFF = "listen_off"
         const val EXTRA_CMD = "cmd"
-        const val EXTRA_OPT = "opt"
+        const val EXTRA_ACTOR = "actor"
+        const val EXTRA_TARGET = "target"
         private const val NOTI_ID = 7
         private val RESTART_TOKEN = Any()
 
@@ -354,10 +389,11 @@ class ScareService : Service() {
         /** 화면 갱신용 */
         var stateListener: (() -> Unit)? = null
 
-        fun send(ctx: Context, action: String, cmd: Cmd? = null, opt: NameOpt? = null) {
+        fun send(ctx: Context, action: String, cmd: String? = null, actor: Who = Who.NONE, target: Who = Who.NONE) {
             val i = Intent(ctx, ScareService::class.java).setAction(action)
-            cmd?.let { i.putExtra(EXTRA_CMD, it.name) }
-            opt?.let { i.putExtra(EXTRA_OPT, it.name) }
+            cmd?.let { i.putExtra(EXTRA_CMD, it) }
+            i.putExtra(EXTRA_ACTOR, actor.name)
+            i.putExtra(EXTRA_TARGET, target.name)
             ctx.startForegroundService(i)
         }
     }

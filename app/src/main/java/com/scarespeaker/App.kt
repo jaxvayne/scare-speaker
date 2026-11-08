@@ -23,9 +23,26 @@ class App : Application() {
             }
         )
         Dedup.start(this)
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(a: android.app.Activity) {
+                if (started++ == 0) opened = true
+            }
+            override fun onActivityStopped(a: android.app.Activity) { started-- }
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
+            override fun onActivityResumed(a: android.app.Activity) {}
+            override fun onActivityPaused(a: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
+            override fun onActivityDestroyed(a: android.app.Activity) {}
+        })
     }
 
     companion object {
+        private var started = 0
+        private var opened = false
+
+        /** 앱이 (백그라운드에서) 새로 열렸으면 true, 한 번만 */
+        fun consumeOpened(): Boolean { val o = opened; opened = false; return o }
+
         const val CHANNEL = "scare_status"
         lateinit var instance: App
             private set
@@ -156,5 +173,41 @@ object Prefs {
         get() = sp.getString("clipsSig", "")!!
         set(v) = sp.edit().putString("clipsSig", v).apply()
 
-    fun currentSignature(): String = "v1|$name1|$name2|${effects}"
+    var style: Style
+        get() = try { Style.valueOf(sp.getString("style", Style.BIG.name)!!) } catch (_: Exception) { Style.BIG }
+        set(v) = sp.edit().putString("style", v.name).apply()
+    var ttsEngine: String
+        get() = sp.getString("ttsEngine", "")!!
+        set(v) = sp.edit().putString("ttsEngine", v).apply()
+    var ttsVoice: String
+        get() = sp.getString("ttsVoice", "")!!
+        set(v) = sp.edit().putString("ttsVoice", v).apply()
+
+    /** 앱을 열면 음성 인식 자동 켜기 (빅스비 "이놈아저씨 열어줘"로 켜기) */
+    var autoListenOnOpen: Boolean
+        get() = sp.getBoolean("autoListenOnOpen", true)
+        set(v) = sp.edit().putBoolean("autoListenOnOpen", v).apply()
+
+    /** 명령이 없으면 음성 인식 자동 꺼짐 (분) */
+    var autoOffMin: Int
+        get() = sp.getInt("autoOffMin", 15)
+        set(v) = sp.edit().putInt("autoOffMin", v).apply()
+
+    // ----- 예약 -----
+    var scheduleOn: Boolean
+        get() = sp.getBoolean("scheduleOn", false)
+        set(v) = sp.edit().putBoolean("scheduleOn", v).apply()
+    var scheduleMinute: Int // 하루 중 분 (21:00 = 1260)
+        get() = sp.getInt("scheduleMinute", 21 * 60)
+        set(v) = sp.edit().putInt("scheduleMinute", v).apply()
+    /** 요일 비트 (월=1, 화=2, ... 일=64) */
+    var scheduleDays: Int
+        get() = sp.getInt("scheduleDays", 127)
+        set(v) = sp.edit().putInt("scheduleDays", v).apply()
+
+    var lastUpdateCheck: Long
+        get() = sp.getLong("lastUpdateCheck", 0)
+        set(v) = sp.edit().putLong("lastUpdateCheck", v).apply()
+
+    fun currentSignature(): String = "v${Scenario.version}|$name1|$name2|$effects|${style.name}|$ttsEngine|$ttsVoice"
 }

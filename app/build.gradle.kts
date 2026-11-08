@@ -17,6 +17,12 @@ android {
         // 빌드할 때마다 자동으로 올라감 → 덮어서 설치 가능
         versionCode = runNumber
         versionName = "1.0.$runNumber"
+        // 업데이트 확인용 읽기 전용 키 (GitHub Secrets의 UPDATE_TOKEN, 없으면 빈 값)
+        buildConfigField("String", "UPDATE_TOKEN", "\"${System.getenv("UPDATE_TOKEN") ?: ""}\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {

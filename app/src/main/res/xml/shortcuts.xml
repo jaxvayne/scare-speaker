@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="listen_on"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/sc_listen"
+        android:shortcutLongLabel="@string/sc_listen">
+        <intent
+            android:action="com.scarespeaker.LISTEN"
+            android:targetPackage="com.scarespeaker"
+            android:targetClass="com.scarespeaker.ListenActivity" />
+    </shortcut>
+</shortcuts>

@@ -1,97 +1,203 @@
 package com.scarespeaker
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 
-/** 버전 1 시나리오: 잠잘 때 상황 + 상황 종료 + 테스트 */
-enum class Cmd(val label: String, val usesName: Boolean, val usesRole: Boolean, val stopsCurrent: Boolean) {
-    COME("이놈아저씨 오세요", false, true, false),
-    TAKE("이놈아저씨 ○○ 데려가세요", true, false, false),
-    NOSLEEP("이놈아저씨 ○○ 안 자요", true, false, false),
-    GOAWAY("이놈아저씨 오지 마세요", false, true, true),
-    END("이놈아저씨 안녕히 가세요", false, true, true),
-    TEST("마이크 테스트", false, false, false),
+/** 누가/누구 (이름 선택) */
+enum class Who { NONE, N1, N2, BOTH, FRIEND }
+
+/** assets/scenario.json 의 명령 하나 */
+data class Command(
+    val id: String,
+    val category: String,
+    val names: String,          // none | single | pair
+    val role: Boolean,          // 대사에 호칭이 들어가는지
+    val stops: Boolean,         // 지금 소리를 멈추고 재생 (마무리)
+    val keyword: String,
+    val match: List<String>,
+    val display: String,
+    val call: String,           // 길게 끄는 첫 마디 ("이노오오옴")
+    val tts: List<String>,
+    val ttsNoName: List<String>?,
+    val steps: String?,         // approach | recede
+) {
+    val label: String get() = keyword.removePrefix("이놈아저씨 ")
 }
 
-enum class NameOpt { NONE, N1, N2, BOTH }
+data class Category(val id: String, val label: String, val order: List<String>)
 
 object Scenario {
+    const val TEST = "TEST"
 
-    fun nameText(opt: NameOpt): String? = when (opt) {
-        NameOpt.NONE -> null
-        NameOpt.N1 -> Prefs.name1
-        NameOpt.N2 -> Prefs.name2
-        NameOpt.BOTH -> "${Prefs.name1}${withRang(Prefs.name1)} ${Prefs.name2}"
+    private var loaded: Pair<List<Command>, List<Category>>? = null
+
+    @Synchronized
+    private fun load(): Pair<List<Command>, List<Category>> {
+        loaded?.let { return it }
+        val text = App.instance.assets.open("scenario.json").bufferedReader().readText()
+        val root = JSONObject(text)
+        fun strs(a: JSONArray?): List<String> = if (a == null) emptyList() else List(a.length()) { a.getString(it) }
+        val cmds = mutableListOf<Command>()
+        val arr = root.getJSONArray("commands")
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            cmds += Command(
+                id = o.getString("id"),
+                category = o.getString("category"),
+                names = o.optString("names", "none"),
+                role = o.optBoolean("role", false),
+                stops = o.optBoolean("stops", false),
+                keyword = o.getString("keyword"),
+                match = strs(o.optJSONArray("match")),
+                display = o.getString("display"),
+                call = o.optString("call", ""),
+                tts = strs(o.optJSONArray("tts")),
+                ttsNoName = o.optJSONArray("tts_noname")?.let { strs(it) },
+                steps = o.optString("steps", "").ifEmpty { null },
+            )
+        }
+        val labels = HashMap<String, String>()
+        root.getJSONArray("categories").let { a ->
+            for (i in 0 until a.length()) labels[a.getJSONObject(i).getString("id")] = a.getJSONObject(i).getString("label")
+        }
+        val cats = mutableListOf<Category>()
+        root.getJSONArray("tabs").let { a ->
+            for (i in 0 until a.length()) {
+                val o = a.getJSONObject(i)
+                val id = o.getString("category")
+                cats += Category(id, labels[id] ?: id, strs(o.getJSONArray("order")))
+            }
+        }
+        return (cmds.toList() to cats.toList()).also { loaded = it }
     }
 
-    fun nameLabel(opt: NameOpt): String = nameText(opt) ?: "이름 없이"
+    val commands: List<Command> get() = load().first
+    val tabs: List<Category> get() = load().second
+    val version: Int get() = 2
 
-    /** 받침이 있으면 '이랑', 없으면 '랑' */
-    private fun withRang(name: String): String {
-        val c = name.lastOrNull() ?: return "랑"
-        if (c !in '가'..'힣') return "랑"
-        return if ((c - '가') % 28 != 0) "이랑" else "랑"
+    fun byId(id: String): Command? = commands.firstOrNull { it.id == id }
+    fun categoryLabel(id: String): String = when (id) {
+        "end" -> "🚪 마무리"
+        else -> tabs.firstOrNull { it.id == id }?.label ?: id
     }
 
-    /** TTS가 읽을 문장 */
-    fun ttsText(cmd: Cmd, role: Role, opt: NameOpt): String {
-        val r = role.label
-        val n = nameText(opt)
-        return when (cmd) {
-            Cmd.COME -> "이노오옴! 누가 $r 말씀 안 듣니!"
-            Cmd.TAKE -> if (n != null) "이노오옴! $n! 이놈아저씨가 잡아가야겠다!"
-            else "이노오옴! 이놈아저씨가 잡아가야겠다!"
-            Cmd.NOSLEEP -> if (n != null) "이노오옴! 누가 안 자고 장난치니! $n! 얼른 안 자면 아저씨가 잡아간다!"
-            else "이노오옴! 누가 안 자고 장난치니! 얼른 안 자면 아저씨가 잡아간다!"
-            Cmd.GOAWAY -> "알았다. 계속 $r 말씀 안 들으면, 아저씨 또 온다!"
-            Cmd.END -> "알았다. $r 말씀 안 들으면, 아저씨 또 온다!"
-            Cmd.TEST -> ""
+    // ---------------- 이름 ----------------
+
+    fun nameOf(w: Who): String? = when (w) {
+        Who.N1 -> Prefs.name1.ifBlank { null }
+        Who.N2 -> Prefs.name2.ifBlank { null }
+        Who.BOTH -> if (Prefs.name1.isNotBlank() && Prefs.name2.isNotBlank())
+            "${Prefs.name1}${josa(Prefs.name1, "이랑", "랑")} ${Prefs.name2}" else null
+        Who.FRIEND -> "친구"
+        Who.NONE -> null
+    }
+
+    fun whoLabel(w: Who): String = nameOf(w) ?: "이름 없이"
+
+    /** 받침 있으면 a, 없으면 b */
+    fun josa(name: String, a: String, b: String): String {
+        val c = name.lastOrNull() ?: return b
+        if (c !in '가'..'힣') return b
+        return if ((c - '가') % 28 != 0) a else b
+    }
+
+    /** 목적격: 연우를 / 민준이를 / 친구를 */
+    private fun obj(name: String): String = if (josa(name, "a", "b") == "a") "${name}이를" else "${name}를"
+
+    /** 명령마다 만들어 둘 이름 조합 */
+    fun variants(c: Command): List<Pair<Who, Who>> = when (c.names) {
+        "single" -> listOf(Who.NONE, Who.N1, Who.N2, Who.BOTH).map { it to Who.NONE }
+        "pair" -> listOf(Who.N1 to Who.N2, Who.N2 to Who.N1, Who.N1 to Who.FRIEND, Who.N2 to Who.FRIEND, Who.NONE to Who.FRIEND)
+        else -> listOf(Who.NONE to Who.NONE)
+    }
+
+    fun roles(c: Command): List<Role> = if (c.role) Role.values().toList() else listOf(Role.DAD)
+
+    fun clipKey(c: Command, role: Role, actor: Who, target: Who): String {
+        val r = if (c.role) role.name else "X"
+        return "${c.id}_${r}_${actor}_${target}".lowercase()
+    }
+
+    fun testKey(): String = "test_${Prefs.testSound.name.lowercase()}"
+
+    private fun fill(s: String, c: Command, role: Role, actor: Who, target: Who): String {
+        val name = nameOf(actor) ?: ""
+        val tgt = nameOf(target) ?: "친구"
+        return s.replace("{role}", role.label)
+            .replace("{name}", name)
+            .replace("{actor}", name)
+            .replace("{target_obj}", obj(tgt))
+            .replace("{target}", tgt)
+    }
+
+    /** TTS로 읽을 문장들 (첫 마디는 따로) */
+    fun ttsParts(c: Command, role: Role, actor: Who, target: Who): List<String> {
+        val named = nameOf(actor) != null
+        val src = when {
+            c.names == "pair" && !named -> c.ttsNoName ?: c.tts
+            c.names == "single" && !named -> c.tts.filterNot { it.contains("{name}") }
+            else -> c.tts
+        }
+        return src.map { fill(it, c, role, actor, target) }.filter { it.isNotBlank() }
+    }
+
+    /** 화면/도움말에 보여 줄 대사 */
+    fun displayText(c: Command, role: Role, actor: Who, target: Who): String {
+        val named = nameOf(actor) != null
+        if (!named && c.names == "pair") {
+            return "이노옴~!! " + (c.ttsNoName ?: c.tts).joinToString(" ") { fill(it, c, role, actor, target) }
+        }
+        var s = c.display
+        if (!named && c.names == "single") s = s.replace("{name}! ", "").replace(" {name}!", "")
+        return fill(s, c, role, actor, target)
+    }
+
+    fun title(c: Command, actor: Who, target: Who): String {
+        val a = nameOf(actor)
+        return when (c.names) {
+            "single" -> c.label.replace("[이름]", a ?: "").replace("  ", " ").trim()
+            "pair" -> if (a == null) c.label.replace("[누가]가 [누구]", "누가 친구").trim()
+            else c.label.replace("[누가]가", a + josa(a, "이가", "가")).replace("[누구]", nameOf(target) ?: "친구")
+            else -> c.label
         }
     }
 
-    fun clipKey(cmd: Cmd, role: Role, opt: NameOpt): String = when (cmd) {
-        Cmd.COME, Cmd.GOAWAY, Cmd.END -> "${cmd.name.lowercase()}_${role.name.lowercase()}"
-        Cmd.TAKE, Cmd.NOSLEEP -> "${cmd.name.lowercase()}_${opt.name.lowercase()}"
-        Cmd.TEST -> "test_${Prefs.testSound.name.lowercase()}"
-    }
-
     fun clipsDir(c: Context): File = File(c.filesDir, "clips").apply { mkdirs() }
-
     fun clipFile(c: Context, key: String): File = File(clipsDir(c), "$key.wav")
 
     // ---------------- 음성 인식 결과 → 명령 ----------------
 
-    data class Match(val cmd: Cmd, val opt: NameOpt)
+    data class Match(val cmd: String, val actor: Who, val target: Who)
 
-    private fun norm(s: String): String =
-        s.lowercase().filter { it in '가'..'힣' || it.isLetterOrDigit() }
+    private fun norm(s: String): String = s.lowercase().filter { it in '가'..'힣' || it.isLetterOrDigit() }
 
     fun match(text: String, testMode: Boolean): Match? {
         val t = norm(text)
         if (t.isEmpty()) return null
-        if (testMode && t.contains("마이크테스트")) return Match(Cmd.TEST, NameOpt.NONE)
+        if (testMode && t.contains("마이크테스트")) return Match(TEST, Who.NONE, Who.NONE)
         if (!t.contains("아저씨")) return null
+        val c = commands.firstOrNull { cmd -> cmd.match.any { t.contains(it) } } ?: return null
 
-        val cmd = when {
-            t.contains("안녕히") || t.contains("잘가세요") -> Cmd.END
-            t.contains("오지마") || t.contains("오지말") -> Cmd.GOAWAY
-            t.contains("데려가") || t.contains("대려가") || t.contains("잡아가") || t.contains("대리고가") || t.contains("데리고가") -> Cmd.TAKE
-            t.contains("안자") || t.contains("안잔") || t.contains("안주무") -> Cmd.NOSLEEP
-            t.contains("오세요") || t.contains("와주세요") || t.contains("오셔") || t.contains("와요") || t.contains("빨리와") -> Cmd.COME
-            else -> null
-        } ?: return null
-
-        var opt = NameOpt.NONE
-        if (cmd.usesName) {
-            val has1 = Prefs.name1.isNotBlank() && t.contains(norm(Prefs.name1))
-            val has2 = Prefs.name2.isNotBlank() && t.contains(norm(Prefs.name2))
-            opt = when {
-                has1 && has2 -> NameOpt.BOTH
-                has1 -> NameOpt.N1
-                has2 -> NameOpt.N2
-                else -> NameOpt.NONE
+        val n1 = norm(Prefs.name1).takeIf { it.isNotEmpty() }
+        val n2 = norm(Prefs.name2).takeIf { it.isNotEmpty() }
+        val i1 = n1?.let { t.indexOf(it) } ?: -1
+        val i2 = n2?.let { t.indexOf(it) } ?: -1
+        return when (c.names) {
+            "single" -> Match(c.id, when {
+                i1 >= 0 && i2 >= 0 -> Who.BOTH
+                i1 >= 0 -> Who.N1
+                i2 >= 0 -> Who.N2
+                else -> Who.NONE
+            }, Who.NONE)
+            "pair" -> when {
+                i1 >= 0 && i2 >= 0 -> if (i1 < i2) Match(c.id, Who.N1, Who.N2) else Match(c.id, Who.N2, Who.N1)
+                i1 >= 0 -> Match(c.id, Who.N1, Who.FRIEND)
+                i2 >= 0 -> Match(c.id, Who.N2, Who.FRIEND)
+                else -> Match(c.id, Who.NONE, Who.FRIEND)
             }
+            else -> Match(c.id, Who.NONE, Who.NONE)
         }
-        return Match(cmd, opt)
     }
 }

@@ -76,9 +76,45 @@ class SettingsActivity : AppCompatActivity() {
 
         // 소리
         root.addView(Ui.section(c, "소리"))
+        root.addView(Ui.smallButton(c, "🔊 목소리 고르기 · 대사 미리듣기") {
+            startActivity(android.content.Intent(c, PreviewActivity::class.java))
+        })
+        root.addView(Ui.spacer(c, 6))
         root.addView(Ui.switch(c, "효과음 (뚜벅뚜벅 발소리)", Prefs.effects) { Prefs.effects = it })
         root.addView(Ui.text(c, "바꾸면 메인 화면에서 음성을 다시 만들어요", 12f))
         root.addView(Ui.switch(c, "음성 인식 시작음 끄기 (폰 미디어 소리 음소거)", Prefs.muteBeep) { Prefs.muteBeep = it })
+
+        // 음성 인식 켜기
+        root.addView(Ui.section(c, "음성 인식 켜기 · 빅스비 · 예약"))
+        root.addView(Ui.switch(c, "앱을 열면 음성 인식 자동 켜기", Prefs.autoListenOnOpen) { Prefs.autoListenOnOpen = it })
+        root.addView(Ui.text(c, "빅스비: \"하이 빅스비, 이놈아저씨 열어줘\" → 앱이 열리며 음성 인식이 켜져요. 빅스비 빠른 명령어에 \"이놈아저씨 켜줘\" = \"이놈아저씨 열어줘\"로 등록하면 더 짧게 부를 수 있어요.", 12f))
+        root.addView(Ui.text(c, "음성 인식은 ${Prefs.autoOffMin}분 동안 명령이 없으면 자동으로 꺼져요.", 12f))
+        root.addView(Ui.spacer(c, 8))
+        root.addView(Ui.switch(c, "예약 알림 켜기", Prefs.scheduleOn) { Prefs.scheduleOn = it; Schedule.apply(c) })
+        val timeBtn = Ui.smallButton(c, "") {}
+        fun timeText() = "알림 시각: %02d:%02d".format(Prefs.scheduleMinute / 60, Prefs.scheduleMinute % 60)
+        timeBtn.text = timeText()
+        timeBtn.setOnClickListener {
+            android.app.TimePickerDialog(c, { _, h, m ->
+                Prefs.scheduleMinute = h * 60 + m; timeBtn.text = timeText(); Schedule.apply(c)
+            }, Prefs.scheduleMinute / 60, Prefs.scheduleMinute % 60, false).show()
+        }
+        root.addView(timeBtn)
+        val days = Ui.row(c).apply { setPadding(0, Ui.dp(c, 6), 0, 0) }
+        val dayNames = listOf("월", "화", "수", "목", "금", "토", "일")
+        fun drawDays() {
+            days.removeAllViews()
+            dayNames.forEachIndexed { i, d ->
+                val bit = 1 shl i
+                val on = Prefs.scheduleDays and bit != 0
+                days.addView(Ui.smallButton(c, d, if (on) Ui.RED else 0xFF3A3A46.toInt()) {
+                    Prefs.scheduleDays = Prefs.scheduleDays xor bit; drawDays(); Schedule.apply(c)
+                }, LinearLayout.LayoutParams(0, Ui.dp(c, 44), 1f).apply { rightMargin = Ui.dp(c, 4) })
+            }
+        }
+        drawDays()
+        root.addView(days)
+        root.addView(Ui.text(c, "정한 시각에 알림이 와요. 알림의 [켜기]를 누르면 음성 인식이 켜져요. (안드로이드 정책상 앱이 혼자서는 마이크를 켤 수 없어 한 번 탭이 필요해요)", 12f))
 
         // 여러 폰
         root.addView(Ui.section(c, "여러 폰에서 겹쳐 재생 막기"))
