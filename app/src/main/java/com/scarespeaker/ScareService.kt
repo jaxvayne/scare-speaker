@@ -58,10 +58,15 @@ class ScareService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_LISTEN_ON -> {
-                if (!listening) { listening = true; goForeground(); startListening() }
+                if (!listening) {
+                    listening = true; goForeground(); startListening()
+                    prepare() // 음성 인식 켤 때 기기 자동 준비
+                }
                 touchActivity()
             }
-            ACTION_LISTEN_OFF -> { stopListening(); goForeground(); stopIfIdle() }
+            ACTION_LISTEN_OFF -> { stopListening(); goForeground(); release(); stopIfIdle() }
+            ACTION_PREPARE_ON -> { goForeground(); prepare() }
+            ACTION_PREPARE_OFF -> { goForeground(); release(); main.postDelayed({ stopIfIdle() }, 300) }
             ACTION_STOP -> {
                 goForeground()
                 worker.execute {
@@ -120,6 +125,7 @@ class ScareService : Service() {
         }
 
         acquireLocks()
+        devicesOn = true
         if (stops) {
             if (Player.playing || Dedup.remoteActive()) {
                 // 1초 동안 소리를 줄이며 멈추고, 1초 쉰 뒤 대사
@@ -153,6 +159,26 @@ class ScareService : Service() {
 
     // ---------------- 음성 인식 ----------------
 
+    // ---------------- 기기 준비 ----------------
+
+    private fun prepare() {
+        devicesOn = true
+        preparing = true
+        notifyChanged()
+        worker.execute {
+            try { Player.prepareDevices(this) } catch (e: Exception) { AppLog.d("기기 준비 오류: ${e.message}") }
+            preparing = false
+            notifyChanged()
+        }
+    }
+
+    private fun release() {
+        if (!devicesOn) return
+        devicesOn = false
+        notifyChanged()
+        worker.execute { try { Player.releaseDevices() } catch (_: Exception) {}; notifyChanged() }
+    }
+
     // ---------------- 자동 꺼짐 ----------------
 
     @Volatile private var lastActivity = System.currentTimeMillis()
@@ -162,7 +188,7 @@ class ScareService : Service() {
             val idleMs = System.currentTimeMillis() - lastActivity
             if (!Player.playing && idleMs > Prefs.autoOffMin * 60_000L) {
                 AppLog.d("${Prefs.autoOffMin}분 동안 명령이 없어 음성 인식 자동 꺼짐")
-                stopListening(); notifyChanged(); stopIfIdle()
+                stopListening(); release(); notifyChanged(); stopIfIdle()
                 return
             }
             main.postDelayed(this, 30_000)
@@ -351,7 +377,7 @@ class ScareService : Service() {
     }
 
     private fun stopIfIdle() {
-        if (!listening && !Player.playing && currentTitle.isEmpty()) {
+        if (!listening && !Player.playing && currentTitle.isEmpty() && !preparing) {
             wakeLock?.release(); wifiLock?.release()
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -377,6 +403,10 @@ class ScareService : Service() {
         const val ACTION_STOP = "stop"
         const val ACTION_LISTEN_ON = "listen_on"
         const val ACTION_LISTEN_OFF = "listen_off"
+        const val ACTION_PREPARE_ON = "prepare_on"
+        const val ACTION_PREPARE_OFF = "prepare_off"
+        @Volatile var devicesOn = false; private set
+        @Volatile var preparing = false; private set
         const val EXTRA_CMD = "cmd"
         const val EXTRA_ACTOR = "actor"
         const val EXTRA_TARGET = "target"

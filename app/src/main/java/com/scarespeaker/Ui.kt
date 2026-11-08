@@ -59,7 +59,7 @@ object Ui {
     fun bigButton(c: Context, s: String, color: Int = RED, heightDp: Int = 72, onClick: () -> Unit) = Button(c).apply {
         text = s; textSize = 18f; setTextColor(TEXT); isAllCaps = false
         background = rounded(color, 18, c)
-        setOnClickListener { onClick() }
+        setOnClickListener { pressFx(it); onClick() }
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(c, heightDp)).apply {
             bottomMargin = dp(c, 10)
         }
@@ -70,7 +70,16 @@ object Ui {
         background = rounded(color, 12, c)
         minWidth = dp(c, 48); minimumWidth = dp(c, 48)
         setPadding(dp(c, 12), 0, dp(c, 12), 0)
-        setOnClickListener { onClick() }
+        setOnClickListener { pressFx(it); onClick() }
+    }
+
+    /** 눌렸다는 걸 알 수 있게: 살짝 작아졌다 커지며 반짝 + 짧은 진동 */
+    fun pressFx(v: View) {
+        v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+        v.animate().cancel()
+        v.animate().scaleX(0.92f).scaleY(0.92f).alpha(0.6f).setDuration(80).withEndAction {
+            v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(160).start()
+        }.start()
     }
 
     fun switch(c: Context, label: String, checked: Boolean, onChange: (Boolean) -> Unit) = SwitchCompat(c).apply {

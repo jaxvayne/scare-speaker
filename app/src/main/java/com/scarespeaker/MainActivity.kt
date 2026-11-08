@@ -22,6 +22,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var listenSwitch: SwitchCompat
     private lateinit var testSwitch: SwitchCompat
+    private lateinit var prepareSwitch: SwitchCompat
+    private lateinit var deviceText: TextView
+    private var requested = ""
     private lateinit var testPanel: LinearLayout
     private lateinit var tabRow: LinearLayout
     private lateinit var tabBody: LinearLayout
@@ -112,7 +115,14 @@ class MainActivity : AppCompatActivity() {
             Prefs.testMode = on
             refresh()
         }
+        prepareSwitch = Ui.switch(c, "🔌 기기 준비 (스피커·TV)", false) { on ->
+            if (updatingSwitches) return@switch
+            ScareService.send(c, if (on) ScareService.ACTION_PREPARE_ON else ScareService.ACTION_PREPARE_OFF)
+        }
+        deviceText = Ui.text(c, "", 13f)
         modes.addView(listenSwitch)
+        modes.addView(prepareSwitch)
+        modes.addView(deviceText)
         modes.addView(testSwitch)
         root.addView(modes)
         root.addView(Ui.spacer(c, 12))
@@ -211,20 +221,30 @@ class MainActivity : AppCompatActivity() {
     private fun refresh() {
         updatingSwitches = true
         listenSwitch.isChecked = ScareService.listening
+        prepareSwitch.isChecked = ScareService.devicesOn
         testSwitch.isChecked = Prefs.testMode
         updatingSwitches = false
         testPanel.visibility = if (Prefs.testMode) View.VISIBLE else View.GONE
         testBtn.text = "▶ 테스트 재생 (${Prefs.testSound.label})"
         val lines = mutableListOf("사용자: ${Prefs.role.label}  ·  재생: ${Prefs.target.label}")
         if (ScareService.listening) lines += "🎙 듣는 중" + (if (Prefs.testMode) " (테스트 모드)" else "") + " · ${Prefs.autoOffMin}분 동안 명령 없으면 꺼짐"
-        if (ScareService.currentTitle.isNotEmpty()) lines += "▶ ${ScareService.currentTitle}"
+        if (ScareService.currentTitle.isNotEmpty()) { lines += "▶ ${ScareService.currentTitle}"; requested = "" }
+        else if (requested.isNotEmpty()) lines += "⏳ $requested 재생 준비 중…"
         if (generating) lines += "음성 준비 중…"
         status.text = lines.joinToString("\n")
+        deviceText.text = when {
+            ScareService.preparing -> "기기 확인 중…"
+            ScareService.devicesOn && Player.deviceStatus.isNotEmpty() -> Player.deviceStatus
+            else -> "재생하거나 음성 인식을 켜면 자동으로 준비돼요"
+        }
         for (b in allButtons) b.isEnabled = !generating
     }
 
     private fun play(cmd: String, a: Who, t: Who) {
         if (generating) return
+        requested = if (cmd == Scenario.TEST) "테스트" else Scenario.byId(cmd)?.let { Scenario.title(it, a, t) } ?: ""
+        refresh()
+        status.postDelayed({ if (requested.isNotEmpty() && ScareService.currentTitle.isEmpty()) { requested = ""; refresh() } }, 30_000)
         ScareService.send(this, ScareService.ACTION_PLAY, cmd, a, t)
     }
 

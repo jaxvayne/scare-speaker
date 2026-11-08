@@ -43,6 +43,36 @@ class CastClient private constructor(private val socket: SSLSocket) {
 
     // ---------- 공개 동작 ----------
 
+    /** 기기 상태: 대기 중인지(isStandBy), 다른 앱/입력이 쓰는 중인지 */
+    data class State(val standby: Boolean?, val activeInput: Boolean?, val appRunning: Boolean)
+
+    fun getState(): State? {
+        val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "GET_STATUS"), 4) ?: return null
+        val st = r.optJSONObject("status") ?: return null
+        val apps = st.optJSONArray("applications")
+        var running = false
+        if (apps != null) for (i in 0 until apps.length()) {
+            val a = apps.getJSONObject(i)
+            if (!a.optBoolean("isIdleScreen", false)) running = true
+        }
+        return State(
+            if (st.has("isStandBy")) st.optBoolean("isStandBy") else null,
+            if (st.has("isActiveInput")) st.optBoolean("isActiveInput") else null,
+            running,
+        )
+    }
+
+    /** 기본 미디어 수신기만 띄움 (사운드바 깨우기) */
+    fun launchOnly(): Boolean {
+        val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "LAUNCH").put("appId", APP_ID), 8) ?: return false
+        val apps = r.optJSONObject("status")?.optJSONArray("applications") ?: return false
+        for (i in 0 until apps.length()) {
+            val a = apps.getJSONObject(i)
+            if (a.optString("appId") == APP_ID) { transportId = a.optString("transportId"); sessionId = a.optString("sessionId") }
+        }
+        return sessionId != null
+    }
+
     fun getVolume(): Volume? {
         val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "GET_STATUS")) ?: return null
         val v = r.optJSONObject("status")?.optJSONObject("volume") ?: return null

@@ -186,6 +186,10 @@ object Player {
         AppLog.d("스피커 연결됨: ${Prefs.castName} (${Prefs.castHost})")
         try { activeCast?.close() } catch (_: Exception) {}
         activeCast = c
+        try {
+            val st = c.getState()
+            if (st != null && st.standby == true && !st.appRunning) { wokeSpeaker = true; AppLog.d("스피커가 대기 상태라 깨워서 재생") }
+        } catch (_: Exception) {}
         val v = c.getVolume()
         AppLog.d("스피커 음량 읽기: ${v?.level ?: "응답 없음"} (단위 ${v?.step})")
         if (v != null) {
@@ -325,5 +329,65 @@ object Player {
         cv?.let { if (it.step > 0) Prefs.castStep = it.step }
         val dv = try { connectTvCast(ctx)?.let { c -> c.getVolume().also { c.close() } }?.let { Math.round(it.level * 100).toInt() } } catch (_: Exception) { null }
         return cv to dv
+    }
+
+    // ---------- 기기 준비 / 정리 ----------
+
+    @Volatile var prepared = false; private set
+    @Volatile var deviceStatus = ""; private set
+    /** 앱이 대기 상태에서 깨운 스피커인지 (끌 때 이것만 정리) */
+    @Volatile private var wokeSpeaker = false
+
+    /** 스피커/스탠바이미를 재생할 수 있게 준비. 사용 중인 기기는 건드리지 않음 */
+    fun prepareDevices(ctx: Context) {
+        val lines = mutableListOf<String>()
+        if (useCast()) {
+            val c = try { connectCast(ctx) } catch (_: Exception) { null }
+            if (c == null) lines += "스피커: 연결 안 됨 (전원·Wi-Fi 확인)"
+            else {
+                try {
+                    val st = c.getState()
+                    AppLog.d("스피커 상태: 대기=${st?.standby} 사용중입력=${st?.activeInput} 앱=${st?.appRunning}")
+                    if (st != null && st.standby == true && !st.appRunning) {
+                        // 아무도 안 쓰는 대기 상태 → 깨움
+                        if (c.launchOnly()) { wokeSpeaker = true; lines += "스피커: 깨움 ✓" }
+                        else lines += "스피커: 깨우기 실패"
+                    } else lines += "스피커: 켜져 있음 ✓"
+                } catch (e: Exception) { lines += "스피커: 확인 실패" }
+                c.close()
+            }
+        }
+        if (useDlna()) {
+            val ok = try {
+                val loc = Prefs.dlnaLocation
+                if (loc.isEmpty()) dlnaDesc(ctx) != null
+                else {
+                    val h = java.net.URL(loc).openConnection() as java.net.HttpURLConnection
+                    h.connectTimeout = 2500; h.readTimeout = 2500
+                    val code = h.responseCode; h.disconnect()
+                    code < 400 || dlnaDesc(ctx) != null
+                }
+            } catch (_: Exception) {
+                DlnaClient.forget(Prefs.dlnaLocation); Prefs.dlnaLocation = ""
+                dlnaDesc(ctx) != null
+            }
+            lines += if (ok) "스탠바이미: 켜져 있음 ✓" else "스탠바이미: 꺼져 있음 (원격 켜기는 다음 버전)"
+        }
+        prepared = true
+        deviceStatus = lines.joinToString("\n")
+        AppLog.d("기기 준비: " + deviceStatus.replace("\n", " / "))
+    }
+
+    /** 준비 끄기 / 자동 꺼짐: 앱이 깨운 기기만 정리 */
+    fun releaseDevices() {
+        if (wokeSpeaker && !playing) {
+            try {
+                CastClient.connect(Prefs.castHost, Prefs.castPort, 3000).let { it.stopApp(); it.close() }
+                AppLog.d("앱이 깨운 스피커 정리 (대기로 돌아감)")
+            } catch (e: Exception) { AppLog.d("스피커 정리 실패: ${e.message}") }
+        }
+        wokeSpeaker = false
+        prepared = false
+        deviceStatus = ""
     }
 }
