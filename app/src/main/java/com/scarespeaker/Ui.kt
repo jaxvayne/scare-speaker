@@ -114,16 +114,11 @@ object Ui {
 
     // ----- 음량 표시 (최소 단위 기준) -----
 
-    fun castVolumeText(): String {
-        val step = Prefs.castStep.takeIf { it > 0 } ?: 0.02
-        val steps = Math.round(Prefs.castVolume / step)
-        val max = Math.round(1.0 / step)
-        return "$steps / $max"
-    }
+    /** 사운드바 화면에 뜨는 숫자와 같게 표시 (0~100) */
+    fun castVolumeText(): String = "${Math.round(Prefs.castVolume * 100)}"
 
     private fun castMove(dir: Int) {
-        val step = Prefs.castStep.takeIf { it > 0 } ?: 0.02
-        Prefs.castVolume = (Math.round(Prefs.castVolume / step) + dir) * step
+        Prefs.castVolume = (Math.round(Prefs.castVolume * 100) + dir) / 100.0
         Player.applyLiveVolume()
     }
     fun castPlus() = castMove(1)
