@@ -1,0 +1,19 @@
+{
+  "note": "추천 설정. 가족이 공유한 설정 코드를 받아 여기에 넣고 업데이트하면, 손대지 않은 설정이 이 값으로 바뀜",
+  "name1": "연우",
+  "name2": "건우",
+  "target": "SPEAKER",
+  "castVolume": 0.12,
+  "dlnaVolume": 12,
+  "dlnaDelayMs": 0,
+  "restoreVolume": true,
+  "effects": true,
+  "dedupMode": "ANY",
+  "testSound": "COUNT",
+  "muteBeep": true,
+  "style": "BIG",
+  "autoListenOnOpen": true,
+  "scheduleOn": false,
+  "scheduleMinute": 1260,
+  "scheduleDays": 127
+}

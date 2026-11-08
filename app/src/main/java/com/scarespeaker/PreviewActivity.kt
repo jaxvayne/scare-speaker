@@ -56,7 +56,7 @@ class PreviewActivity : AppCompatActivity() {
     }
 
     private fun updateVoiceLabel() {
-        voiceLabel.text = "엔진: ${Prefs.ttsEngine.ifEmpty { "기본" }}\n음성: ${Prefs.ttsVoice.ifEmpty { "기본" }}"
+        voiceLabel.text = "엔진: ${Prefs.ttsEngine.ifEmpty { "기본" }}\n음성: ${if (Prefs.ttsVoice.isEmpty()) "기본" else voiceName(Prefs.ttsVoice)}"
     }
 
     private fun buildList() {
@@ -171,7 +171,7 @@ class PreviewActivity : AppCompatActivity() {
             runOnUiThread {
                 dlg.dismiss()
                 if (voices.isEmpty()) { toast("고를 수 있는 한국어 음성이 없어요"); return@runOnUiThread }
-                val items = listOf("기본") + voices
+                val items = listOf("기본") + voices.map { voiceName(it) }
                 AlertDialog.Builder(this).setTitle("한국어 음성 (${voices.size}개)")
                     .setItems(items.toTypedArray()) { _, i ->
                         Prefs.ttsVoice = if (i == 0) "" else voices[i - 1]
@@ -180,6 +180,25 @@ class PreviewActivity : AppCompatActivity() {
                     }.show()
             }
         }.start()
+    }
+
+    /** 구글 TTS 음성 코드를 알아보기 쉬운 이름으로 */
+    private fun voiceName(v: String): String {
+        val l = v.lowercase()
+        val who = when {
+            "-koc" in l -> "남성 1"
+            "-kod" in l -> "남성 2"
+            "-ism" in l -> "여성 1"
+            "-kob" in l -> "여성 2"
+            "-koa" in l -> "여성 3"
+            else -> null
+        }
+        val where = when {
+            l.endsWith("-network") -> " · 온라인"
+            l.endsWith("-local") -> " · 기기 안"
+            else -> ""
+        }
+        return if (who != null) "$who$where  ($v)" else v
     }
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()

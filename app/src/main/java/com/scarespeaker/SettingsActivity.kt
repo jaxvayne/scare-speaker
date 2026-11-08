@@ -125,6 +125,15 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(Ui.section(c, "테스트 소리"))
         root.addView(Ui.radio(c, TestSound.values().toList(), { it.label }, Prefs.testSound) { Prefs.testSound = it })
 
+        // 설정 공유
+        root.addView(Ui.section(c, "설정 공유 (가족끼리 같은 설정 쓰기)"))
+        root.addView(Ui.smallButton(c, "📤 내 설정 공유하기") { shareSettings() })
+        root.addView(Ui.spacer(c, 6))
+        root.addView(Ui.smallButton(c, "📥 설정 코드 붙여넣기") { pasteSettings() })
+        root.addView(Ui.spacer(c, 6))
+        root.addView(Ui.smallButton(c, "⭐ 추천 설정으로 맞추기") { resetRecommended() })
+        root.addView(Ui.text(c, "사용자(아빠/엄마/할머니)는 공유되지 않아요. 각자 고르세요.", 12f))
+
         // 기타
         root.addView(Ui.section(c, "기타"))
         root.addView(Ui.smallButton(c, "진단 기록 보기") { showLog() })
@@ -237,6 +246,48 @@ class SettingsActivity : AppCompatActivity() {
                 toast("복사했어요")
             }
             .setNegativeButton("닫기", null).show()
+    }
+
+    private fun shareSettings() {
+        val code = Prefs.exportCode()
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("settings", code))
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(android.content.Intent.EXTRA_TEXT, "이놈아저씨 앱 설정 코드예요. 앱 설정 > 설정 코드 붙여넣기에 넣어 주세요.\n\n$code")
+        }
+        toast("설정 코드를 복사했어요")
+        startActivity(android.content.Intent.createChooser(send, "설정 보내기"))
+    }
+
+    private fun pasteSettings() {
+        val clip = try {
+            getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()
+        } catch (_: Exception) { null } ?: ""
+        val e = edit(if (clip.contains("이놈아저씨설정:")) clip.substring(clip.indexOf("이놈아저씨설정:")) else "", "설정 코드")
+        e.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        AlertDialog.Builder(this).setTitle("설정 코드 붙여넣기")
+            .setMessage("가족에게 받은 설정 코드를 넣어 주세요.")
+            .setView(e)
+            .setPositiveButton("적용") { _, _ ->
+                if (Prefs.importCode(e.text.toString())) {
+                    Schedule.apply(this)
+                    toast("적용했어요. 메인 화면에서 필요하면 음성을 다시 만들어요")
+                    recreate()
+                } else toast("코드를 읽지 못했어요")
+            }
+            .setNegativeButton("취소", null).show()
+    }
+
+    private fun resetRecommended() {
+        AlertDialog.Builder(this).setTitle("추천 설정으로 맞출까요?")
+            .setMessage("음량·기기·목소리 등 공유 설정이 앱에 들어 있는 추천값으로 바뀌어요. (사용자는 그대로)")
+            .setPositiveButton("맞추기") { _, _ ->
+                Prefs.resetToRecommended()
+                Schedule.apply(this)
+                toast("추천 설정으로 맞췄어요")
+                recreate()
+            }
+            .setNegativeButton("취소", null).show()
     }
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
