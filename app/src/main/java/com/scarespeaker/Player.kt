@@ -49,17 +49,35 @@ object Player {
         val both = Prefs.target == Target.BOTH
         AppLog.d("재생 시작: $title → ${Prefs.target.label} ($url, ${durMs}ms)")
 
+        // 1단계: 두 기기 모두 소리를 받아 준비 → 2단계: 같은 순간에 재생 (싱크 맞추기)
+        val jobs = (if (useCast()) 1 else 0) + (if (useDlna()) 1 else 0)
+        val ready = java.util.concurrent.CountDownLatch(jobs)
         val castJob: Future<Boolean>? = if (useCast()) exec.submit<Boolean> {
+            val ok = try { prepareCast(ctx, url, title, remote?.first) } catch (e: Exception) {
+                AppLog.d("스피커 준비 실패: ${e.message}"); false
+            } finally { ready.countDown() }
+            if (!ok) return@submit false
+            ready.await(12, TimeUnit.SECONDS)
+            if (generation.get() != gen) return@submit false
             if (both && delay < 0) Thread.sleep(-delay.toLong())
-            startCast(ctx, url, title, remote?.first)
+            AppLog.d("스피커 ▶ 재생 명령")
+            activeCast?.play() ?: false
         } else null
         val dlnaJob: Future<Boolean>? = if (useDlna()) exec.submit<Boolean> {
+            val d = try { prepareDlna(ctx, url, title, remote?.second) } catch (e: Exception) {
+                AppLog.d("스탠바이미 준비 실패: ${e.message}"); null
+            } finally { ready.countDown() }
+            if (d == null) return@submit false
+            ready.await(12, TimeUnit.SECONDS)
+            if (generation.get() != gen) return@submit false
             if (both && delay > 0) Thread.sleep(delay.toLong())
-            startDlna(ctx, url, title, remote?.second)
+            AppLog.d("스탠바이미 ▶ 재생 명령")
+            DlnaClient.start(d)
+            true
         } else null
 
-        val castOk = try { castJob?.get(25, TimeUnit.SECONDS) ?: false } catch (e: Exception) { AppLog.d("스피커 재생 실패: ${e.cause?.message ?: e.message}"); false }
-        val dlnaOk = try { dlnaJob?.get(25, TimeUnit.SECONDS) ?: false } catch (e: Exception) { AppLog.d("스탠바이미 재생 실패: ${e.cause?.message ?: e.message}"); false }
+        val castOk = try { castJob?.get(60, TimeUnit.SECONDS) ?: false } catch (e: Exception) { AppLog.d("스피커 재생 실패: ${e.cause?.message ?: e.message}"); false }
+        val dlnaOk = try { dlnaJob?.get(60, TimeUnit.SECONDS) ?: false } catch (e: Exception) { AppLog.d("스탠바이미 재생 실패: ${e.cause?.message ?: e.message}"); false }
         if (castJob != null) AppLog.d("스피커: ${if (castOk) "재생됨" else "실패"}")
         if (dlnaJob != null) AppLog.d("스탠바이미: ${if (dlnaOk) "재생됨" else "실패"}")
         if (!castOk && !dlnaOk) {
@@ -116,8 +134,8 @@ object Player {
         val c = activeCast
         if (useCast()) {
             try {
-                if (c != null) c.stopApp()
-                else connectCast(App.instance)?.let { it.stopApp(); it.close() }
+                if (c != null && !c.isClosed) c.stopApp()
+                else if (Prefs.castHost.isNotEmpty()) CastClient.connect(Prefs.castHost, Prefs.castPort, 3000).let { it.stopApp(); it.close() }
             } catch (e: Exception) { AppLog.d("스피커 정지 실패: ${e.message}") }
         }
         if (useDlna()) {
@@ -136,7 +154,11 @@ object Player {
     private fun finish(restore: Boolean) {
         if (restore && Prefs.restoreVolume) {
             savedCast?.takeIf { it > 0.001 }?.let { v ->
-                try { (activeCast ?: connectCast(App.instance))?.setVolume(v) } catch (_: Exception) {}
+                try {
+                    val c = activeCast
+                    if (c != null && !c.isClosed) c.setVolume(v, 3)
+                    else CastClient.connect(Prefs.castHost, Prefs.castPort, 3000).let { it.setVolume(v, 3); it.close() }
+                } catch (_: Exception) { AppLog.d("스피커 음량 되돌리기 실패") }
                 AppLog.d("스피커 음량 되돌림 → ${"%.2f".format(v)}")
             }
             savedDlna?.let { v ->
@@ -158,7 +180,8 @@ object Player {
         playingTitle = ""
     }
 
-    private fun startCast(ctx: Context, url: String, title: String, remoteOrig: Double?): Boolean {
+    /** 스피커: 연결, 음량 맞추고, 일시정지 상태로 소리를 받아 둠 */
+    private fun prepareCast(ctx: Context, url: String, title: String, remoteOrig: Double?): Boolean {
         val c = connectCast(ctx) ?: return false
         AppLog.d("스피커 연결됨: ${Prefs.castName} (${Prefs.castHost})")
         try { activeCast?.close() } catch (_: Exception) {}
@@ -170,12 +193,14 @@ object Player {
             if (savedCast == null) savedCast = remoteOrig?.takeIf { it >= 0 } ?: v.level
         }
         c.setVolume(Prefs.castVolume)
-        return c.load(url, title)
+        if (!c.load(url, title, autoplay = false)) return false
+        Thread.sleep(300) // 버퍼링 여유
+        AppLog.d("스피커 준비 완료")
+        return true
     }
 
-    /** 스탠바이미: DLNA로 먼저 시도하고, 안 되면 TV의 캐스트 기능으로 재생 */
-    private fun startDlna(ctx: Context, url: String, title: String, remoteOrig: Int?): Boolean {
-        // 음량은 TV 캐스트 연결로 맞춤 (DLNA 음량 조절을 막아 둔 TV가 있음)
+    /** 스탠바이미: 음량은 TV 캐스트로 맞추고, 소리는 DLNA로 준비 */
+    private fun prepareDlna(ctx: Context, url: String, title: String, remoteOrig: Int?): DlnaClient.Desc? {
         val tv = connectTvCast(ctx)
         try {
             val v = tv?.getVolume()
@@ -188,12 +213,13 @@ object Player {
         try { activeTvCast?.close() } catch (_: Exception) {}
         activeTvCast = tv
 
-        // 재생은 DLNA (이 TV는 캐스트 재생 요청에 응답하지 않음)
         for (attempt in 1..2) {
-            val d = dlnaDesc(ctx) ?: return false
+            val d = dlnaDesc(ctx) ?: return null
             activeDlna = d
             try {
-                return DlnaClient.play(d, url, title).also { if (it) AppLog.d("스탠바이미: DLNA로 재생") }
+                DlnaClient.prepare(d, url, title)
+                AppLog.d("스탠바이미 준비 완료")
+                return d
             } catch (e: java.io.IOException) {
                 // 공유기를 껐다 켜서 TV 주소가 바뀐 경우: 다시 찾기
                 AppLog.d("스탠바이미 연결 실패(${e.message}), 주소 다시 찾는 중")
@@ -201,12 +227,12 @@ object Player {
                 Prefs.dlnaLocation = ""
                 activeDlna = null
             } catch (e: Exception) {
-                AppLog.d("스탠바이미 DLNA 재생 실패: ${e.message}")
+                AppLog.d("스탠바이미 준비 실패: ${e.message}")
                 activeDlna = null
-                return false
+                return null
             }
         }
-        return false
+        return null
     }
 
     @Volatile private var activeTvCast: CastClient? = null
@@ -242,9 +268,18 @@ object Player {
             Prefs.castName = ""; Prefs.castHost = ""
         }
         if (Prefs.castHost.isNotEmpty()) {
-            try { return CastClient.connect(Prefs.castHost, Prefs.castPort) } catch (e: Exception) {
-                AppLog.d("저장된 스피커 주소 연결 실패, 다시 찾는 중: ${e.message}")
+            // 사운드바는 재생이 끝난 직후 잠깐(20~30초) 응답하지 않을 때가 있어 몇 번 다시 시도
+            for (attempt in 1..4) {
+                try {
+                    val c = CastClient.connect(Prefs.castHost, Prefs.castPort, 3000)
+                    if (attempt > 1) AppLog.d("스피커 재시도 $attempt 번째에 연결됨")
+                    return c
+                } catch (e: Exception) {
+                    AppLog.d("스피커 연결 실패 ($attempt/4): ${e.message?.take(60)}")
+                    Thread.sleep(2000)
+                }
             }
+            AppLog.d("저장된 스피커 주소로 연결 안 됨, 다시 찾는 중")
         }
         val list = Discovery.findCast(ctx)
         val pick = list.firstOrNull { Prefs.castName.isNotEmpty() && it.name == Prefs.castName }

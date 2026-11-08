@@ -39,17 +39,23 @@ object DlnaClient {
         }
     }
 
-    fun play(d: Desc, url: String, title: String): Boolean {
+    /** 소리 주소를 TV에 넘겨 준비시킴 (TV가 파일을 가져감) */
+    fun prepare(d: Desc, url: String, title: String): Boolean {
         val av = d.avTransportUrl ?: return false
-        try { soap(av, AVT, "Stop", "<InstanceID>0</InstanceID>") } catch (_: Exception) {}
-        Thread.sleep(600)
+        try { soap(av, AVT, "Stop", "<InstanceID>0</InstanceID>", 3000) } catch (_: Exception) {}
+        Thread.sleep(400)
         val didl = """<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="1" parentID="0" restricted="1"><dc:title>${esc(title)}</dc:title><upnp:class>object.item.audioItem.musicTrack</upnp:class><res protocolInfo="http-get:*:${SoundServer.MIME}:${SoundServer.DLNA_FEATURES}">${esc(url)}</res></item></DIDL-Lite>"""
         retry701(av) {
             soap(av, AVT, "SetAVTransportURI",
                 "<InstanceID>0</InstanceID><CurrentURI>${esc(url)}</CurrentURI><CurrentURIMetaData>${esc(didl)}</CurrentURIMetaData>", 25000)
         }
-        retry701(av) { soap(av, AVT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>", 15000) }
         return true
+    }
+
+    /** 준비된 소리 재생 */
+    fun start(d: Desc) {
+        val av = d.avTransportUrl ?: return
+        retry701(av) { soap(av, AVT, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>", 15000) }
     }
 
     /** TV가 아직 이전 재생을 정리 중이면(701) 멈추고 잠시 뒤 다시 시도 */

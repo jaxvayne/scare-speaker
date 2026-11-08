@@ -49,13 +49,24 @@ class CastClient private constructor(private val socket: SSLSocket) {
         return Volume(v.optDouble("level", 0.0), v.optDouble("stepInterval", 0.0))
     }
 
-    fun setVolume(level: Double) {
+    val isClosed: Boolean get() = closed
+
+    fun setVolume(level: Double, timeoutSec: Long = 5) {
         request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "SET_VOLUME")
-            .put("volume", JSONObject().put("level", level.coerceIn(0.0, 1.0))))
+            .put("volume", JSONObject().put("level", level.coerceIn(0.0, 1.0))), timeoutSec)
+    }
+
+    /** 준비(일시정지 상태로 LOAD)해 둔 소리를 재생 */
+    fun play(): Boolean {
+        val tid = transportId ?: return false
+        if (mediaSessionId == 0) return false
+        send(NS_MEDIA, tid, JSONObject().put("type", "PLAY").put("mediaSessionId", mediaSessionId)
+            .put("requestId", reqId.incrementAndGet()))
+        return true
     }
 
     /** 기본 미디어 수신기를 띄우고 음성 파일을 재생 */
-    fun load(url: String, title: String): Boolean {
+    fun load(url: String, title: String, autoplay: Boolean = true): Boolean {
         val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "LAUNCH").put("appId", APP_ID), 8)
         AppLog.d("캐스트 LAUNCH 응답: ${r?.toString()?.take(200) ?: "없음 (연결 끊김=${closed})"}")
         if (r == null) return false
@@ -74,7 +85,7 @@ class CastClient private constructor(private val socket: SSLSocket) {
             .put("streamType", "BUFFERED")
             .put("contentType", SoundServer.MIME)
             .put("metadata", JSONObject().put("metadataType", 0).put("title", title))
-        val lr = request(NS_MEDIA, tid, JSONObject().put("type", "LOAD").put("media", media).put("autoplay", true), 15)
+        val lr = request(NS_MEDIA, tid, JSONObject().put("type", "LOAD").put("media", media).put("autoplay", autoplay), 15)
         AppLog.d("캐스트 LOAD 응답: ${lr?.optString("type")}")
         lr?.optJSONArray("status")?.optJSONObject(0)?.optInt("mediaSessionId", 0)?.takeIf { it != 0 }?.let { mediaSessionId = it }
         return lr != null && lr.optString("type") != "LOAD_FAILED" && lr.optString("type") != "LOAD_CANCELLED"
@@ -87,7 +98,7 @@ class CastClient private constructor(private val socket: SSLSocket) {
         if (transportId == null || mediaSessionId == 0) {
             // 다른 폰이 틀었거나 새 연결이면: 재생 중인 미디어를 찾아서 멈춤
             try {
-                val st = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "GET_STATUS"))
+                val st = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "GET_STATUS"), 3)
                 val apps = st?.optJSONObject("status")?.optJSONArray("applications")
                 if (apps != null) for (i in 0 until apps.length()) {
                     val a = apps.getJSONObject(i)
@@ -95,22 +106,23 @@ class CastClient private constructor(private val socket: SSLSocket) {
                 }
                 transportId?.let { t ->
                     send(NS_CONN, t, JSONObject().put("type", "CONNECT").put("origin", JSONObject()))
-                    val ms = request(NS_MEDIA, t, JSONObject().put("type", "GET_STATUS"), 4)
+                    val ms = request(NS_MEDIA, t, JSONObject().put("type", "GET_STATUS"), 3)
                     ms?.optJSONArray("status")?.optJSONObject(0)?.optInt("mediaSessionId", 0)?.takeIf { it != 0 }?.let { mediaSessionId = it }
                 }
             } catch (e: Exception) { AppLog.d("캐스트 상태 확인 실패: ${e.message}") }
         }
         val tid = transportId
         if (tid != null && mediaSessionId != 0) {
-            val r = request(NS_MEDIA, tid, JSONObject().put("type", "STOP").put("mediaSessionId", mediaSessionId), 4)
+            val r = request(NS_MEDIA, tid, JSONObject().put("type", "STOP").put("mediaSessionId", mediaSessionId), 3)
             AppLog.d("캐스트 미디어 정지 응답: ${r?.optString("type") ?: "없음"}")
+            if (r != null) return
         }
         stopReceiverApp()
     }
 
     private fun stopReceiverApp() {
         val sid = sessionId ?: run {
-            val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "GET_STATUS"))
+            val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "GET_STATUS"), 3)
             val apps = r?.optJSONObject("status")?.optJSONArray("applications")
             var found: String? = null
             if (apps != null) for (i in 0 until apps.length()) {
@@ -119,7 +131,7 @@ class CastClient private constructor(private val socket: SSLSocket) {
             }
             found
         } ?: return
-        val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "STOP").put("sessionId", sid), 5)
+        val r = request(NS_RECEIVER, RECEIVER, JSONObject().put("type", "STOP").put("sessionId", sid), 3)
         AppLog.d("캐스트 앱 정지 응답: ${r?.optString("type") ?: "없음"}")
     }
 

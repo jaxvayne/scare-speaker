@@ -35,7 +35,7 @@ class App : Application() {
 /** 진단용 기록. 설정 화면의 '진단 기록'에서 볼 수 있다. */
 object AppLog {
     private val lines = ArrayDeque<String>()
-    private val fmt = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
+    private val fmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.KOREA)
 
     @Synchronized
     fun d(msg: String) {

@@ -122,7 +122,7 @@ class MainActivity : AppCompatActivity() {
         testPanel.addView(Ui.stepper(this, "스피커 음량", Ui::castVolumeText, Ui::castMinus, Ui::castPlus))
         testPanel.addView(Ui.stepper(this, "스탠바이미 음량", { "${Prefs.dlnaVolume}" }, Ui::dlnaMinus, Ui::dlnaPlus))
         testPanel.addView(Ui.stepper(this, "스탠바이미 지연", Ui::delayText,
-            { Prefs.dlnaDelayMs -= 50 }, { Prefs.dlnaDelayMs += 50 }))
+            { Prefs.dlnaDelayMs -= 10 }, { Prefs.dlnaDelayMs += 10 }))
         testPanel.addView(Ui.text(this, "지연: 스탠바이미가 늦게 들리면 −, 빨리 들리면 + (다음 재생부터 적용)", 12f))
         root.addView(testPanel)
         root.addView(Ui.spacer(this, 12))

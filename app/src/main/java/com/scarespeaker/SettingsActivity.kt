@@ -70,7 +70,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // 둘 다 재생할 때
         root.addView(Ui.section(c, "둘 다 재생할 때 맞추기"))
-        val delay = Ui.stepper(c, "스탠바이미 지연", Ui::delayText, { Prefs.dlnaDelayMs -= 50 }, { Prefs.dlnaDelayMs += 50 })
+        val delay = Ui.stepper(c, "스탠바이미 지연", Ui::delayText, { Prefs.dlnaDelayMs -= 10 }, { Prefs.dlnaDelayMs += 10 })
         root.addView(delay)
         root.addView(Ui.text(c, "스탠바이미가 늦게 들리면 −, 빨리 들리면 +", 12f))
 
