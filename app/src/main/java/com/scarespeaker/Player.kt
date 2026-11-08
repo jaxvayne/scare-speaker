@@ -340,42 +340,59 @@ object Player {
 
     /** 스피커/스탠바이미를 재생할 수 있게 준비. 사용 중인 기기는 건드리지 않음 */
     fun prepareDevices(ctx: Context) {
-        val lines = mutableListOf<String>()
         if (useCast()) {
-            val c = try { connectCast(ctx) } catch (_: Exception) { null }
-            if (c == null) lines += "스피커: 연결 안 됨 (전원·Wi-Fi 확인)"
-            else {
-                try {
-                    val st = c.getState()
-                    AppLog.d("스피커 상태: 대기=${st?.standby} 사용중입력=${st?.activeInput} 앱=${st?.appRunning}")
-                    if (st != null && st.standby == true && !st.appRunning) {
-                        // 아무도 안 쓰는 대기 상태 → 깨움
-                        if (c.launchOnly()) { wokeSpeaker = true; lines += "스피커: 깨움 ✓" }
-                        else lines += "스피커: 깨우기 실패"
-                    } else lines += "스피커: 켜져 있음 ✓"
-                } catch (e: Exception) { lines += "스피커: 확인 실패" }
-                c.close()
-            }
-        }
-        if (useDlna()) {
-            val ok = try {
-                val loc = Prefs.dlnaLocation
-                if (loc.isEmpty()) dlnaDesc(ctx) != null
-                else {
-                    val h = java.net.URL(loc).openConnection() as java.net.HttpURLConnection
-                    h.connectTimeout = 2500; h.readTimeout = 2500
-                    val code = h.responseCode; h.disconnect()
-                    code < 400 || dlnaDesc(ctx) != null
+            try {
+                connectCast(ctx)?.let { c ->
+                    try {
+                        val st = c.getState()
+                        if (st != null && st.standby == true && !st.appRunning && c.launchOnly()) {
+                            wokeSpeaker = true
+                            AppLog.d("기기 준비: 대기 중인 스피커를 깨움")
+                        }
+                    } finally { c.close() }
                 }
-            } catch (_: Exception) {
-                DlnaClient.forget(Prefs.dlnaLocation); Prefs.dlnaLocation = ""
-                dlnaDesc(ctx) != null
-            }
-            lines += if (ok) "스탠바이미: 켜져 있음 ✓" else "스탠바이미: 꺼져 있음 (원격 켜기는 다음 버전)"
+            } catch (e: Exception) { AppLog.d("스피커 준비 실패: ${e.message}") }
         }
         prepared = true
+        checkDevices(ctx)
+    }
+
+    /** 지금 시점의 두 기기 상태 확인 (깨우지는 않음) */
+    fun checkDevices(ctx: Context) {
+        val lines = mutableListOf<String>()
+        // 스피커
+        lines += try {
+            val c = connectCast(ctx)
+            if (c == null) "🔈 스피커: 연결 안 됨 (꺼짐 또는 Wi-Fi 확인)"
+            else try {
+                val st = c.getState()
+                when {
+                    st == null -> "🔈 스피커: 응답 없음"
+                    wokeSpeaker -> "🔈 스피커: 켜짐 (앱이 깨움) ✓"
+                    st.standby == true -> "🔈 스피커: 대기 중 (재생하면 깨움)"
+                    else -> "🔈 스피커: 켜짐 ✓"
+                }
+            } finally { c.close() }
+        } catch (e: Exception) { "🔈 스피커: 확인 실패" }
+        // 스탠바이미
+        val tvOk = try {
+            val loc = Prefs.dlnaLocation
+            if (loc.isEmpty()) dlnaDesc(ctx) != null
+            else {
+                val h = java.net.URL(loc).openConnection() as java.net.HttpURLConnection
+                h.connectTimeout = 2500; h.readTimeout = 2500
+                val code = h.responseCode; h.disconnect()
+                code < 400
+            }
+        } catch (_: Exception) {
+            DlnaClient.forget(Prefs.dlnaLocation); Prefs.dlnaLocation = ""
+            try { dlnaDesc(ctx) != null } catch (_: Exception) { false }
+        }
+        lines += if (tvOk) "📺 스탠바이미: 켜짐 ✓" else "📺 스탠바이미: 꺼짐 (원격 켜기는 다음 버전)"
+        val t = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.KOREA).format(java.util.Date())
+        lines += "($t 기준 · 재생 기기: ${Prefs.target.label})"
         deviceStatus = lines.joinToString("\n")
-        AppLog.d("기기 준비: " + deviceStatus.replace("\n", " / "))
+        AppLog.d("기기 상태: " + deviceStatus.replace("\n", " / "))
     }
 
     /** 준비 끄기 / 자동 꺼짐: 앱이 깨운 기기만 정리 */
@@ -388,6 +405,5 @@ object Player {
         }
         wokeSpeaker = false
         prepared = false
-        deviceStatus = ""
     }
 }

@@ -120,9 +120,12 @@ class MainActivity : AppCompatActivity() {
             ScareService.send(c, if (on) ScareService.ACTION_PREPARE_ON else ScareService.ACTION_PREPARE_OFF)
         }
         deviceText = Ui.text(c, "", 13f)
+        val devRow = Ui.row(c)
+        devRow.addView(deviceText, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        devRow.addView(Ui.smallButton(c, "🔍 상태 확인") { ScareService.send(c, ScareService.ACTION_CHECK) })
         modes.addView(listenSwitch)
         modes.addView(prepareSwitch)
-        modes.addView(deviceText)
+        modes.addView(devRow)
         modes.addView(testSwitch)
         root.addView(modes)
         root.addView(Ui.spacer(c, 12))
@@ -234,8 +237,8 @@ class MainActivity : AppCompatActivity() {
         status.text = lines.joinToString("\n")
         deviceText.text = when {
             ScareService.preparing -> "기기 확인 중…"
-            ScareService.devicesOn && Player.deviceStatus.isNotEmpty() -> Player.deviceStatus
-            else -> "재생하거나 음성 인식을 켜면 자동으로 준비돼요"
+            Player.deviceStatus.isNotEmpty() -> Player.deviceStatus
+            else -> "🔍 상태 확인을 누르면 스피커와 스탠바이미 상태를 보여줘요"
         }
         for (b in allButtons) b.isEnabled = !generating
     }

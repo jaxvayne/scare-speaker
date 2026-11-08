@@ -66,6 +66,15 @@ class ScareService : Service() {
             }
             ACTION_LISTEN_OFF -> { stopListening(); goForeground(); release(); stopIfIdle() }
             ACTION_PREPARE_ON -> { goForeground(); prepare() }
+            ACTION_CHECK -> {
+                goForeground()
+                preparing = true; notifyChanged()
+                worker.execute {
+                    try { Player.checkDevices(this) } catch (e: Exception) { AppLog.d("상태 확인 오류: ${e.message}") }
+                    preparing = false; notifyChanged()
+                    main.post { stopIfIdle() }
+                }
+            }
             ACTION_PREPARE_OFF -> { goForeground(); release(); main.postDelayed({ stopIfIdle() }, 300) }
             ACTION_STOP -> {
                 goForeground()
@@ -169,6 +178,7 @@ class ScareService : Service() {
             try { Player.prepareDevices(this) } catch (e: Exception) { AppLog.d("기기 준비 오류: ${e.message}") }
             preparing = false
             notifyChanged()
+            main.post { stopIfIdle() }
         }
     }
 
@@ -405,6 +415,7 @@ class ScareService : Service() {
         const val ACTION_LISTEN_OFF = "listen_off"
         const val ACTION_PREPARE_ON = "prepare_on"
         const val ACTION_PREPARE_OFF = "prepare_off"
+        const val ACTION_CHECK = "check"
         @Volatile var devicesOn = false; private set
         @Volatile var preparing = false; private set
         const val EXTRA_CMD = "cmd"
