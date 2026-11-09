@@ -55,7 +55,10 @@ class ScareService : Service() {
         SoundServer.ensure(Scenario.clipsDir(this))
     }
 
+    @Volatile private var stopping = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        stopping = false
         when (intent?.action) {
             ACTION_LISTEN_ON -> {
                 if (!listening) {
@@ -100,7 +103,9 @@ class ScareService : Service() {
 
     override fun onDestroy() {
         stopListening()
+        stopping = true
         running = null
+        cancelNoti()
         wakeLock?.release()
         wifiLock?.release()
         notifyChanged()
@@ -375,7 +380,7 @@ class ScareService : Service() {
 
     private fun notifyChanged() {
         main.post {
-            if (running != null) {
+            if (running != null && !stopping) {
                 try {
                     getSystemService(android.app.NotificationManager::class.java)
                         .notify(NOTI_ID, buildNotification())
@@ -388,10 +393,22 @@ class ScareService : Service() {
 
     private fun stopIfIdle() {
         if (!listening && !Player.playing && currentTitle.isEmpty() && !preparing) {
+            stopping = true
             wakeLock?.release(); wifiLock?.release()
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            cancelNoti()
             stopSelf()
         }
+    }
+
+    /** 남아 있는 '대기 중' 알림 지우기 */
+    private fun cancelNoti() {
+        try { getSystemService(android.app.NotificationManager::class.java).cancel(NOTI_ID) } catch (_: Exception) {}
+        main.postDelayed({
+            if (running == null || stopping) try {
+                getSystemService(android.app.NotificationManager::class.java).cancel(NOTI_ID)
+            } catch (_: Exception) {}
+        }, 500)
     }
 
     private fun acquireLocks() {

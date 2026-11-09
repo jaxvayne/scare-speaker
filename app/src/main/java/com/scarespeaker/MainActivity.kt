@@ -64,6 +64,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ScareService.stateListener = { runOnUiThread { refresh() } }
+        if (ScareService.running == null) {
+            // 이전 버전에서 남은 '대기 중' 알림 정리
+            getSystemService(android.app.NotificationManager::class.java).cancel(7)
+        }
         rebuildTab()
         refresh()
         if (Prefs.roleChosen) ensureClips()
