@@ -16,9 +16,13 @@ class App : Application() {
         instance = this
         Prefs.init(this)
         val nm = getSystemService(NotificationManager::class.java)
+        try { nm.deleteNotificationChannel("scare_status") } catch (_: Exception) {}
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "이놈아저씨 상태", NotificationManager.IMPORTANCE_LOW).apply {
+            // 기본 중요도(소리·진동 없음): 잠금화면과 AOD에 아이콘이 보이도록
+            NotificationChannel(CHANNEL, "이놈아저씨 작동 상태", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
         )
@@ -43,7 +47,7 @@ class App : Application() {
         /** 앱이 (백그라운드에서) 새로 열렸으면 true, 한 번만 */
         fun consumeOpened(): Boolean { val o = opened; opened = false; return o }
 
-        const val CHANNEL = "scare_status"
+        const val CHANNEL = "scare_status_v2"
         lateinit var instance: App
             private set
     }
@@ -65,7 +69,8 @@ object AppLog {
     fun dump(): String = lines.joinToString("\n")
 }
 
-enum class Role(val label: String) { DAD("아빠"), MOM("엄마"), GRANDMA("할머니") }
+/** label: 앱에 보이는 이름, call: 대사 속 호칭 */
+enum class Role(val label: String, val call: String) { DAD("아빠", "아빠"), MOM("엄마", "엄마"), GRANDMA("할머니", "할머니"), OTHER("다른 사람", "어른") }
 enum class Target(val label: String) { SPEAKER("LG 스피커"), STANBYME("스탠바이미"), BOTH("둘 다") }
 enum class DedupMode(val label: String) { ANY("어떤 소리든 막기"), SAME("같은 소리만 막기") }
 enum class TestSound(val label: String) { COUNT("숫자 세기"), MUSIC("잔잔한 음악") }
@@ -88,7 +93,7 @@ object Prefs {
         set(v) = sp.edit().putBoolean("roleChosen", v).apply()
 
     var role: Role
-        get() = Role.valueOf(sp.getString("role", Role.DAD.name)!!)
+        get() = try { Role.valueOf(sp.getString("role", Role.DAD.name)!!) } catch (_: Exception) { Role.DAD }
         set(v) = sp.edit().putString("role", v.name).apply()
 
     var name1: String
@@ -163,6 +168,11 @@ object Prefs {
     var testSound: TestSound
         get() = TestSound.valueOf(sp.getString("testSound", Rec.s("testSound", TestSound.COUNT.name))!!)
         set(v) = sp.edit().putString("testSound", v.name).apply()
+
+    /** 기기 안 음성 인식 사용 (유튜브 멈춤 줄이기) */
+    var onDeviceStt: Boolean
+        get() = sp.getBoolean("onDeviceStt", Rec.b("onDeviceStt", true))
+        set(v) = sp.edit().putBoolean("onDeviceStt", v).apply()
 
     var muteBeep: Boolean
         get() = sp.getBoolean("muteBeep", Rec.b("muteBeep", true))

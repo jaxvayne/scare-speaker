@@ -203,20 +203,22 @@ class MainActivity : AppCompatActivity() {
         if (cmds.any { it.names == "pair" }) {
             tabBody.addView(chipRow("누가?", listOf(Who.N1, Who.N2, Who.NONE), actor) { w ->
                 actor = w
-                if (w == Who.NONE) target = Who.FRIEND
-                else if (target == w) target = if (w == Who.N1) Who.N2 else Who.N1
+                if (target == w || (w == Who.NONE && target != Who.FRIEND && target != Who.OTHER)) target = Who.FRIEND
             })
-            if (actor != Who.NONE) {
-                val other = if (actor == Who.N1) Who.N2 else Who.N1
-                tabBody.addView(chipRow("누구를?", listOf(other, Who.FRIEND), target) { w -> target = w })
+            val choices = when (actor) {
+                Who.N1 -> listOf(Who.N2, Who.FRIEND, Who.OTHER)
+                Who.N2 -> listOf(Who.N1, Who.FRIEND, Who.OTHER)
+                else -> listOf(Who.FRIEND, Who.OTHER)
             }
+            if (target !in choices) target = choices.first()
+            tabBody.addView(chipRow("누구를?", choices, target) { w -> target = w })
         } else if (cmds.any { it.names == "single" }) {
             tabBody.addView(chipRow("누구?", listOf(Who.N1, Who.N2, Who.BOTH, Who.NONE), single) { w -> single = w })
         }
         for (cmd in cmds) {
             val (a, t) = when (cmd.names) {
                 "single" -> single to Who.NONE
-                "pair" -> if (actor == Who.NONE) Who.NONE to Who.FRIEND else actor to target
+                "pair" -> actor to target
                 else -> Who.NONE to Who.NONE
             }
             val b = Ui.bigButton(this, Scenario.title(cmd, a, t), Ui.RED) { play(cmd.id, a, t) }
@@ -260,36 +262,62 @@ class MainActivity : AppCompatActivity() {
     // ---------------- 도움말 ----------------
 
     private fun showHelp() {
+        val c = this
         val role = Prefs.role
-        val sb = StringBuilder()
-        sb.append("이놈아저씨에게 이렇게 말하면, 거실 스피커/TV에서 대사가 나와요.\n")
-        sb.append("• [이름]: ${Prefs.name1} / ${Prefs.name2} / ${Scenario.whoLabel(Who.BOTH)}\n")
-        sb.append("• [호칭]: 앱에서 고른 사용자 (지금: ${role.label})\n")
-        sb.append("• 이름을 못 알아들으면 이름 없이, 괴롭힘의 [누구]는 \"친구\"로 나와요.\n")
+        val blue = 0xFF64B5F6.toInt()
+        val box = Ui.column(c, 4)
+
+        fun card(title: String, color: Int = 0xFFE8665C.toInt()): LinearLayout {
+            val k = Ui.card(c)
+            k.addView(Ui.text(c, title, 16f, color).apply { setTypeface(typeface, android.graphics.Typeface.BOLD) })
+            box.addView(k, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { bottomMargin = Ui.dp(c, 10) })
+            return k
+        }
+        fun item(k: LinearLayout, keyword: String, line: String) {
+            k.addView(Ui.text(c, "🗣 $keyword", 15f, blue).apply {
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding(0, Ui.dp(c, 10), 0, Ui.dp(c, 2))
+            })
+            k.addView(Ui.text(c, "→ $line", 14f, 0xFFDDDDE6.toInt()))
+        }
+
+        val intro = card("이렇게 말해요", Ui.TEXT)
+        intro.addView(Ui.text(c, "\"이놈아저씨\" + 아래 파란 글씨처럼 말하면 거실 스피커/TV에서 대사가 나와요.", 14f, 0xFFDDDDE6.toInt()))
+        intro.addView(Ui.text(c, "• [이름]: ${Prefs.name1} / ${Prefs.name2} / ${Scenario.whoLabel(Who.BOTH)}\n• [호칭]: 지금 사용자 → \"${role.call}\"\n• 이름을 못 알아들으면 이름 없이 나와요.", 13f).apply {
+            setPadding(0, Ui.dp(c, 6), 0, 0)
+        })
+
         val cats = Scenario.tabs.map { it.id } + "end"
         for (cat in cats) {
-            sb.append("\n").append(Scenario.categoryLabel(cat)).append("\n")
+            val k = card(Scenario.categoryLabel(cat))
             for (cmd in Scenario.commands.filter { it.category == cat }) {
                 val (a, t) = when (cmd.names) {
                     "single" -> Who.N1 to Who.NONE
                     "pair" -> Who.N1 to Who.N2
                     else -> Who.NONE to Who.NONE
                 }
-                sb.append("🗣 ").append(cmd.keyword).append("\n")
-                sb.append("   → ").append(Scenario.displayText(cmd, role, a, t)).append("\n")
+                item(k, cmd.keyword, Scenario.displayText(cmd, role, a, t))
             }
+            if (cat == "bully") k.addView(Ui.text(c, "먼저 말한 이름이 [누가], 뒤 이름이 [누구]. [누구]를 못 알아들으면 \"친구\", \"다른 사람\"이라고 하면 \"다른 사람\"으로 나와요.", 12f).apply {
+                setPadding(0, Ui.dp(c, 8), 0, 0)
+            })
         }
-        sb.append("\n🧪 마이크 테스트 (테스트 모드에서만)\n   → 숫자 세기 또는 잔잔한 음악\n")
-        sb.append("\n📌 알아두기\n")
-        sb.append("• 문장에 \"아저씨\"와 키워드만 들어가면 돼요. 띄어쓰기·앞뒤 말은 상관없어요.\n")
-        sb.append("• 괴롭힘은 먼저 말한 이름이 [누가], 뒤 이름이 [누구]예요.\n")
-        sb.append("• 소리가 나오는 동안엔 새 명령을 무시해요. (마무리 명령은 언제든 돼요)\n")
-        sb.append("• 음성 인식은 ${Prefs.autoOffMin}분 동안 명령이 없으면 자동으로 꺼져요.\n")
-        sb.append("• 여러 폰에서 동시에 말해도 한 번만 재생돼요.\n")
-        sb.append("• 앱을 열면 음성 인식이 자동으로 켜져요. 빅스비로 \"이놈아저씨 열어줘\"라고 해도 돼요.\n")
-        val tv = Ui.text(this, sb.toString(), 14f, Ui.TEXT).apply { setPadding(48, 24, 48, 24); setTextIsSelectable(true) }
-        AlertDialog.Builder(this).setTitle("❓ 도움말")
-            .setView(ScrollView(this).apply { addView(tv) })
+        val t = card("🧪 테스트")
+        item(t, "마이크 테스트 (테스트 모드에서만)", "숫자 세기 또는 잔잔한 음악")
+
+        val tips = card("📌 알아두기", Ui.TEXT)
+        tips.addView(Ui.text(c, listOf(
+            "문장에 \"아저씨\"와 키워드만 들어가면 돼요. 띄어쓰기·앞뒤 말은 상관없어요.",
+            "소리가 나오는 동안엔 새 명령을 무시해요. (마무리 명령은 언제든)",
+            "음성 인식은 ${Prefs.autoOffMin}분 동안 명령이 없으면 자동으로 꺼져요.",
+            "여러 폰에서 동시에 말해도 한 번만 재생돼요.",
+            "앱을 열면 음성 인식이 켜져요. 빅스비로 \"이놈아저씨 열어줘\"도 돼요.",
+            "집 Wi-Fi가 아니면 재생하지 않아요.",
+        ).joinToString("\n") { "• $it" }, 13f, 0xFFDDDDE6.toInt()).apply { setPadding(0, Ui.dp(c, 6), 0, 0) })
+
+        AlertDialog.Builder(c).setTitle("❓ 도움말")
+            .setView(ScrollView(c).apply { setBackgroundColor(Ui.BG); setPadding(Ui.dp(c, 12), Ui.dp(c, 8), Ui.dp(c, 12), 0); addView(box) })
             .setPositiveButton("닫기", null).show()
     }
 

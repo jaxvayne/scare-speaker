@@ -41,6 +41,9 @@ class ScareService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var mutedStreams = false
+    private var onDeviceFailed = false
+    private var usingOnDevice = false
+    private var loggedEngine = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -165,7 +168,7 @@ class ScareService : Service() {
         if (!ok) {
             currentTitle = ""
             ignoreUntil = 0
-            toast("재생하지 못했어요. 설정 > 진단 기록을 확인해 주세요")
+            toast(if (!Player.atHome()) "집 Wi-Fi가 아니라 재생하지 않았어요" else "재생하지 못했어요. 설정 > 진단 기록을 확인해 주세요")
             notifyChanged()
             main.post { stopIfIdle() }
         }
@@ -223,7 +226,7 @@ class ScareService : Service() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             toast("이 폰에서 음성 인식을 쓸 수 없어요"); listening = false; notifyChanged(); return
         }
-        if (Prefs.muteBeep && !mutedStreams) {
+        if (Prefs.muteBeep && !mutedStreams && !getSystemService(AudioManager::class.java).isMusicActive) {
             val am = getSystemService(AudioManager::class.java)
             try {
                 am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
@@ -243,7 +246,13 @@ class ScareService : Service() {
     private fun listenRound() {
         if (!listening) return
         if (recognizer == null) {
-            recognizer = SpeechRecognizer.createSpeechRecognizer(this).apply { setRecognitionListener(listener) }
+            // 기기 안 인식을 쓰면 유튜브 등 다른 앱 소리를 덜 멈춤
+            val useOnDevice = Prefs.onDeviceStt && !onDeviceFailed && Build.VERSION.SDK_INT >= 31 &&
+                SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+            recognizer = (if (useOnDevice) SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+            else SpeechRecognizer.createSpeechRecognizer(this)).apply { setRecognitionListener(listener) }
+            if (!loggedEngine) { AppLog.d("음성 인식 방식: ${if (useOnDevice) "기기 안" else "기본"}"); loggedEngine = true }
+            usingOnDevice = useOnDevice
         }
         handledThisRound = false
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -252,6 +261,11 @@ class ScareService : Service() {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            // 말이 끊겨도 바로 끝내지 않게 (재시작 횟수 줄이기)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15000L)
         }
         try { recognizer?.startListening(i) } catch (e: Exception) {
             AppLog.d("인식 시작 오류: ${e.message}")
@@ -324,7 +338,13 @@ class ScareService : Service() {
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                     toast("마이크 권한이 필요해요"); stopListening(); notifyChanged(); stopIfIdle()
                 }
-                else -> { AppLog.d("인식 오류 $error"); restart(1500, recreate = true) }
+                else -> {
+                    if (usingOnDevice && (error == 12 || error == 13 || error == 14)) {
+                        AppLog.d("기기 안 인식을 쓸 수 없어 기본 방식으로 바꿈 (오류 $error)")
+                        onDeviceFailed = true; loggedEngine = false
+                        restart(500, recreate = true)
+                    } else { AppLog.d("인식 오류 $error"); restart(1500, recreate = true) }
+                }
             }
         }
     }

@@ -1,111 +1,400 @@
 {
-  "version": 2,
+  "version": 3,
   "note": "대사와 키워드 정의. 안드로이드/아이폰 앱이 함께 쓸 수 있도록 데이터로 분리. match는 위에서부터 먼저 검사함. {role}=호칭, {name}=이름, {actor}=누가, {target}=누구(조사 없음), {target_obj}=누구를",
   "categories": [
-    {"id": "sleep", "label": "🌙 잠잘 때"},
-    {"id": "meal", "label": "🍚 식사예절"},
-    {"id": "bully", "label": "🤝 괴롭힘"},
-    {"id": "end", "label": "🚪 마무리"}
+    {
+      "id": "sleep",
+      "label": "🌙 잠잘 때"
+    },
+    {
+      "id": "meal",
+      "label": "🍚 식사예절"
+    },
+    {
+      "id": "bully",
+      "label": "🤝 괴롭힘"
+    },
+    {
+      "id": "habit",
+      "label": "🪥 생활습관"
+    },
+    {
+      "id": "end",
+      "label": "🚪 마무리"
+    }
   ],
   "commands": [
     {
-      "id": "END", "category": "end", "names": "none", "role": true, "stops": true,
+      "id": "END",
+      "category": "end",
+      "names": "none",
+      "role": true,
+      "stops": true,
       "keyword": "이놈아저씨 안녕히 가세요",
-      "match": ["안녕히", "잘가세요"],
+      "match": [
+        "안녕히",
+        "잘가세요"
+      ],
       "display": "알았다. {role} 말씀 안 들으면 아저씨 또 온다!! (뚜벅뚜벅 멀어짐)",
       "call": "알았다",
-      "tts": ["{role} 말씀 안 들으면, 아저씨 또 온다!"],
+      "tts": [
+        "{role} 말씀 안 들으면, 아저씨 또 온다!"
+      ],
       "steps": "recede"
     },
     {
-      "id": "GOAWAY", "category": "end", "names": "none", "role": true, "stops": true,
+      "id": "GOAWAY",
+      "category": "end",
+      "names": "none",
+      "role": true,
+      "stops": true,
       "keyword": "이놈아저씨 오지 마세요",
-      "match": ["오지마", "오지말"],
+      "match": [
+        "오지마",
+        "오지말"
+      ],
       "display": "알았다. 계속 {role} 말씀 안 들으면 아저씨 또 온다!! (뚜벅뚜벅 멀어짐)",
       "call": "알았다",
-      "tts": ["계속 {role} 말씀 안 들으면, 아저씨 또 온다!"],
+      "tts": [
+        "계속 {role} 말씀 안 들으면, 아저씨 또 온다!"
+      ],
       "steps": "recede"
     },
     {
-      "id": "HIT", "category": "bully", "names": "pair", "role": false,
+      "id": "HIT",
+      "category": "bully",
+      "names": "pair",
+      "role": false,
       "keyword": "이놈아저씨 [누가]가 [누구] 때려요",
-      "match": ["때려", "때렸", "때리"],
+      "match": [
+        "때려",
+        "때렸",
+        "때리"
+      ],
       "display": "이노옴~!! {actor}! {target_obj} 때리면 안 된다!! 때리는 아이는 아저씨가 잡아간다!!",
       "call": "이노오오옴",
-      "tts": ["{actor}!", "{target_obj} 때리면 안 된다!", "때리는 아이는 아저씨가 잡아간다!"],
-      "tts_noname": ["누가 친구를 때리니!", "때리는 아이는 아저씨가 잡아간다!"]
+      "tts": [
+        "{actor}!",
+        "{target_obj} 때리면 안 된다!",
+        "때리는 아이는 아저씨가 잡아간다!"
+      ],
+      "tts_noname": [
+        "누가 {target_obj} 때리니!",
+        "때리는 아이는 아저씨가 잡아간다!"
+      ]
     },
     {
-      "id": "BULLY", "category": "bully", "names": "pair", "role": false,
+      "id": "BULLY",
+      "category": "bully",
+      "names": "pair",
+      "role": false,
       "keyword": "이놈아저씨 [누가]가 [누구] 괴롭혀요",
-      "match": ["괴롭", "괴로펴", "괴로혀"],
+      "match": [
+        "괴롭",
+        "괴로펴",
+        "괴로혀"
+      ],
       "display": "이노옴~!! {actor}! {target_obj} 괴롭히면 안 된다!! 사이좋게 지내야지!!",
       "call": "이노오오옴",
-      "tts": ["{actor}!", "{target_obj} 괴롭히면 안 된다!", "사이좋게 지내야지!"],
-      "tts_noname": ["누가 친구를 괴롭히니!", "사이좋게 지내야지!"]
+      "tts": [
+        "{actor}!",
+        "{target_obj} 괴롭히면 안 된다!",
+        "사이좋게 지내야지!"
+      ],
+      "tts_noname": [
+        "누가 {target_obj} 괴롭히니!",
+        "사이좋게 지내야지!"
+      ]
     },
     {
-      "id": "GRAB", "category": "bully", "names": "pair", "role": false,
+      "id": "GRAB",
+      "category": "bully",
+      "names": "pair",
+      "role": false,
       "keyword": "이놈아저씨 [누가]가 [누구] 물건 뺏어요",
-      "match": ["뺏", "뺐", "빼앗", "빼았", "빼써", "빼서"],
+      "match": [
+        "뺏",
+        "뺐",
+        "빼앗",
+        "빼았",
+        "빼써",
+        "빼서"
+      ],
       "display": "이노옴~!! {actor}! {target} 물건 뺏으면 안 된다!! 얼른 돌려줘라!!",
       "call": "이노오오옴",
-      "tts": ["{actor}!", "{target} 물건 뺏으면 안 된다!", "얼른 돌려줘라!"],
-      "tts_noname": ["누가 친구 물건을 뺏니!", "얼른 돌려줘라!"]
+      "tts": [
+        "{actor}!",
+        "{target} 물건 뺏으면 안 된다!",
+        "얼른 돌려줘라!"
+      ],
+      "tts_noname": [
+        "누가 {target} 물건을 뺏니!",
+        "얼른 돌려줘라!"
+      ]
     },
     {
-      "id": "TAKE", "category": "sleep", "names": "single", "role": false,
+      "id": "TAKE",
+      "category": "sleep",
+      "names": "single",
+      "role": false,
       "keyword": "이놈아저씨 [이름] 데려가세요 / 잡아가세요",
-      "match": ["데려가", "대려가", "잡아가", "데리고가", "대리고가"],
+      "match": [
+        "데려가",
+        "대려가",
+        "잡아가",
+        "데리고가",
+        "대리고가"
+      ],
       "display": "이노옴~!! {name}! 이놈아저씨가 잡아가야겠다!!",
       "call": "이노오오옴",
-      "tts": ["{name}!", "이놈아저씨가, 잡아가야겠다!"]
+      "tts": [
+        "{name}!",
+        "이놈아저씨가, 잡아가야겠다!"
+      ]
     },
     {
-      "id": "NOSLEEP", "category": "sleep", "names": "single", "role": false,
+      "id": "TOY",
+      "category": "sleep",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 장난감 가지고 놀아요 / 장난쳐요",
+      "match": [
+        "장난감",
+        "장난쳐",
+        "장난처"
+      ],
+      "display": "이노옴~!! 누가 잘 때 장난감 가지고 장난치니!! {name}! 빨리 안 자면 아저씨가 잡아간다!!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 잘 때 장난감 가지고 장난치니!",
+        "{name}!",
+        "빨리 안 자면, 아저씨가 잡아간다!"
+      ]
+    },
+    {
+      "id": "NOSLEEP",
+      "category": "sleep",
+      "names": "single",
+      "role": false,
       "keyword": "이놈아저씨 [이름] 안 자요",
-      "match": ["안자", "안잔", "안주무"],
+      "match": [
+        "안자",
+        "안잔",
+        "안주무"
+      ],
       "display": "이노옴~!! 누가 안 자고 장난치니!!! {name}! 얼른 안 자면 아저씨가 잡아간다!!",
       "call": "이노오오옴",
-      "tts": ["누가 안 자고 장난치니!", "{name}!", "얼른 안 자면, 아저씨가 잡아간다!"]
+      "tts": [
+        "누가 안 자고 장난치니!",
+        "{name}!",
+        "얼른 안 자면, 아저씨가 잡아간다!"
+      ]
     },
     {
-      "id": "NOEAT", "category": "meal", "names": "single", "role": false,
+      "id": "NOEAT",
+      "category": "meal",
+      "names": "single",
+      "role": false,
       "keyword": "이놈아저씨 [이름] 밥 안 먹어요",
-      "match": ["밥안먹", "밥을안먹", "안먹어", "안먹고", "밥안머"],
+      "match": [
+        "밥안먹",
+        "밥을안먹",
+        "안먹어",
+        "안먹고",
+        "밥안머"
+      ],
       "display": "이노옴~!! 누가 밥 안 먹고 딴짓하니!! {name}! 밥 다 먹어야 튼튼해진다!!",
       "call": "이노오오옴",
-      "tts": ["누가 밥 안 먹고 딴짓하니!", "{name}!", "밥 다 먹어야, 튼튼해진다!"]
+      "tts": [
+        "누가 밥 안 먹고 딴짓하니!",
+        "{name}!",
+        "밥 다 먹어야, 튼튼해진다!"
+      ]
     },
     {
-      "id": "WANDER", "category": "meal", "names": "single", "role": false,
+      "id": "WANDER",
+      "category": "meal",
+      "names": "single",
+      "role": false,
       "keyword": "이놈아저씨 [이름] 돌아다녀요",
-      "match": ["돌아다", "돌아댕", "도라다"],
+      "match": [
+        "돌아다",
+        "돌아댕",
+        "도라다"
+      ],
       "display": "이노옴~!! 밥 먹을 땐 자리에 앉아서 먹는 거다!! {name}! 얼른 앉아라!!",
       "call": "이노오오옴",
-      "tts": ["밥 먹을 땐, 자리에 앉아서 먹는 거다!", "{name}!", "얼른 앉아라!"]
+      "tts": [
+        "밥 먹을 땐, 자리에 앉아서 먹는 거다!",
+        "{name}!",
+        "얼른 앉아라!"
+      ]
     },
     {
-      "id": "PICKY", "category": "meal", "names": "single", "role": false,
+      "id": "PICKY",
+      "category": "meal",
+      "names": "single",
+      "role": false,
       "keyword": "이놈아저씨 [이름] 편식해요",
-      "match": ["편식", "편시"],
+      "match": [
+        "편식",
+        "편시"
+      ],
       "display": "이노옴~!! 반찬 골고루 안 먹는 아이가 누구냐!! {name}! 골고루 먹어야지!!",
       "call": "이노오오옴",
-      "tts": ["반찬 골고루 안 먹는 아이가, 누구냐!", "{name}!", "골고루 먹어야지!"]
+      "tts": [
+        "반찬 골고루 안 먹는 아이가, 누구냐!",
+        "{name}!",
+        "골고루 먹어야지!"
+      ]
     },
     {
-      "id": "COME", "category": "sleep", "names": "none", "role": true,
+      "id": "THUMB",
+      "category": "habit",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 손 빨아요",
+      "match": [
+        "손빨",
+        "손가락빨",
+        "손을빨",
+        "손꾸락빨"
+      ],
+      "display": "이노옴~!! 누가 손 빠니!! {name}! 손 빨면 이가 아야 한다!! 얼른 손 빼라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 손 빠니!",
+        "{name}!",
+        "손 빨면, 이가 아야 한다!",
+        "얼른 손 빼라!"
+      ]
+    },
+    {
+      "id": "BRUSH",
+      "category": "habit",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 치카 안 해요 / 이 안 닦아요",
+      "match": [
+        "치카",
+        "양치",
+        "이안닦",
+        "이를안닦",
+        "이빨안닦"
+      ],
+      "display": "이노옴~!! 누가 치카 안 하니!! {name}! 이 안 닦으면 벌레가 생긴다!! 얼른 치카해라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 치카 안 하니!",
+        "{name}!",
+        "이 안 닦으면, 벌레가 생긴다!",
+        "얼른 치카해라!"
+      ]
+    },
+    {
+      "id": "TANTRUM",
+      "category": "habit",
+      "names": "single",
+      "role": true,
+      "keyword": "이놈아저씨 [이름] 땡깡 부려요 / 떼써요 / 말 안 들어요",
+      "match": [
+        "땡깡",
+        "떼써",
+        "때써",
+        "떼쓰",
+        "때쓰",
+        "생떼",
+        "말안들어",
+        "말을안들어"
+      ],
+      "display": "이노옴~!! 누가 떼쓰니!! {name}! {role} 말씀 잘 들어야지!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 떼쓰니!",
+        "{name}!",
+        "{role} 말씀 잘 들어야지!"
+      ]
+    },
+    {
+      "id": "WHINE",
+      "category": "habit",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 우는소리 내요",
+      "match": [
+        "우는소리",
+        "징징",
+        "찡찡",
+        "울어요",
+        "울고"
+      ],
+      "display": "이노옴~!! 누가 자꾸 우는소리 내니!!! {name}! 뚝!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 자꾸 우는소리 내니!",
+        "{name}!",
+        "뚝!"
+      ]
+    },
+    {
+      "id": "COME",
+      "category": "sleep",
+      "names": "none",
+      "role": true,
       "keyword": "이놈아저씨 오세요",
-      "match": ["오세요", "와주세요", "오셔", "와요", "빨리와"],
+      "match": [
+        "오세요",
+        "와주세요",
+        "오셔",
+        "와요",
+        "빨리와",
+        "오라그래",
+        "오라고",
+        "와라",
+        "오라해"
+      ],
       "display": "(뚜벅뚜벅 다가옴) 이노옴~!! 누가 {role} 말씀 안 듣니!!",
       "call": "이노오오옴",
-      "tts": ["누가 {role} 말씀 안 듣니!"],
+      "tts": [
+        "누가 {role} 말씀 안 듣니!"
+      ],
       "steps": "approach"
     }
   ],
   "tabs": [
-    {"category": "sleep", "order": ["COME", "TAKE", "NOSLEEP"]},
-    {"category": "meal", "order": ["NOEAT", "WANDER", "PICKY"]},
-    {"category": "bully", "order": ["HIT", "BULLY", "GRAB"]}
+    {
+      "category": "sleep",
+      "order": [
+        "COME",
+        "TAKE",
+        "NOSLEEP",
+        "TOY"
+      ]
+    },
+    {
+      "category": "meal",
+      "order": [
+        "NOEAT",
+        "WANDER",
+        "PICKY"
+      ]
+    },
+    {
+      "category": "bully",
+      "order": [
+        "HIT",
+        "BULLY",
+        "GRAB"
+      ]
+    },
+    {
+      "category": "habit",
+      "order": [
+        "THUMB",
+        "BRUSH",
+        "TANTRUM",
+        "WHINE"
+      ]
+    }
   ]
 }

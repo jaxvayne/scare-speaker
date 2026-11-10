@@ -27,7 +27,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // 사용자
         root.addView(Ui.section(c, "사용자"))
-        root.addView(Ui.radio(c, Role.values().toList(), { it.label }, Prefs.role) { Prefs.role = it })
+        root.addView(Ui.radio(c, Role.values().toList(), { it.label }, Prefs.role, horizontal = false) { Prefs.role = it })
         root.addView(Ui.text(c, "대사 속 호칭이 바뀌어요 (예: \"누가 엄마 말씀 안 듣니\")", 12f))
 
         // 아이 이름
@@ -83,6 +83,9 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(Ui.switch(c, "효과음 (뚜벅뚜벅 발소리)", Prefs.effects) { Prefs.effects = it })
         root.addView(Ui.text(c, "바꾸면 메인 화면에서 음성을 다시 만들어요", 12f))
         root.addView(Ui.switch(c, "음성 인식 시작음 끄기 (폰 미디어 소리 음소거)", Prefs.muteBeep) { Prefs.muteBeep = it })
+        root.addView(Ui.text(c, "유튜브 등 다른 소리가 나오고 있으면 음소거하지 않아요.", 12f))
+        root.addView(Ui.switch(c, "기기 안 음성 인식 (유튜브 멈춤 줄이기)", Prefs.onDeviceStt) { Prefs.onDeviceStt = it })
+        root.addView(Ui.text(c, "다음에 음성 인식을 켤 때부터 적용돼요. 이 폰에서 지원하지 않으면 자동으로 기본 방식을 써요.", 12f))
 
         // 음성 인식 켜기
         root.addView(Ui.section(c, "음성 인식 켜기 · 빅스비 · 예약"))

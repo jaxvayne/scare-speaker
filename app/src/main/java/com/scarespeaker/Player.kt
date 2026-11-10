@@ -38,6 +38,10 @@ object Player {
      */
     fun start(ctx: Context, file: File, title: String, key: String, onFinished: () -> Unit): Boolean {
         SoundServer.ensure(Scenario.clipsDir(ctx))
+        if (!atHome()) {
+            AppLog.d("집 Wi-Fi가 아니라 재생하지 않음 (폰 주소 ${SoundServer.localIp()})")
+            return false
+        }
         val url = SoundServer.urlFor(file) ?: run {
             AppLog.d("Wi-Fi 주소를 찾지 못함")
             return false
@@ -241,6 +245,18 @@ object Player {
 
     @Volatile private var activeTvCast: CastClient? = null
 
+    /** 폰이 기기들과 같은 집 Wi-Fi(같은 주소대)에 있는지. 저장된 기기가 없으면 true */
+    fun atHome(): Boolean {
+        val ip = SoundServer.localIp() ?: return false
+        val hosts = listOfNotNull(
+            Prefs.castHost.ifEmpty { null }, Prefs.tvCastHost.ifEmpty { null },
+            try { java.net.URL(Prefs.dlnaLocation).host } catch (_: Exception) { null },
+        )
+        if (hosts.isEmpty()) return true
+        val prefix = ip.substringBeforeLast('.')
+        return hosts.any { it.substringBeforeLast('.') == prefix }
+    }
+
     /** 이 주소가 스탠바이미인지 */
     fun isTvHost(host: String): Boolean {
         if (host.isEmpty()) return false
@@ -340,6 +356,7 @@ object Player {
 
     /** 스피커/스탠바이미를 재생할 수 있게 준비. 사용 중인 기기는 건드리지 않음 */
     fun prepareDevices(ctx: Context) {
+        if (!atHome()) { checkDevices(ctx); return }
         if (useCast()) {
             try {
                 connectCast(ctx)?.let { c ->
@@ -360,6 +377,11 @@ object Player {
     /** 지금 시점의 두 기기 상태 확인 (깨우지는 않음) */
     fun checkDevices(ctx: Context) {
         val lines = mutableListOf<String>()
+        if (!atHome()) {
+            deviceStatus = "🏠 집 Wi-Fi가 아니에요 (폰 주소 ${SoundServer.localIp() ?: "없음"})"
+            AppLog.d("기기 상태: 집 Wi-Fi 아님")
+            return
+        }
         // 스피커
         lines += try {
             val c = connectCast(ctx)

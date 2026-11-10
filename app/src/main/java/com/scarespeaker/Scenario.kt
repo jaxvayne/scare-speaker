@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 
 /** 누가/누구 (이름 선택) */
-enum class Who { NONE, N1, N2, BOTH, FRIEND }
+enum class Who { NONE, N1, N2, BOTH, FRIEND, OTHER }
 
 /** assets/scenario.json 의 명령 하나 */
 data class Command(
@@ -75,7 +75,7 @@ object Scenario {
 
     val commands: List<Command> get() = load().first
     val tabs: List<Category> get() = load().second
-    val version: Int get() = 2
+    val version: Int get() = 3
 
     fun byId(id: String): Command? = commands.firstOrNull { it.id == id }
     fun categoryLabel(id: String): String = when (id) {
@@ -91,6 +91,7 @@ object Scenario {
         Who.BOTH -> if (Prefs.name1.isNotBlank() && Prefs.name2.isNotBlank())
             "${Prefs.name1}${josa(Prefs.name1, "이랑", "랑")} ${Prefs.name2}" else null
         Who.FRIEND -> "친구"
+        Who.OTHER -> "다른 사람"
         Who.NONE -> null
     }
 
@@ -103,13 +104,17 @@ object Scenario {
         return if ((c - '가') % 28 != 0) a else b
     }
 
-    /** 목적격: 연우를 / 민준이를 / 친구를 */
-    private fun obj(name: String): String = if (josa(name, "a", "b") == "a") "${name}이를" else "${name}를"
+    /** 목적격: 연우를 / 민준이를 / 친구를 / 다른 사람을 */
+    private fun obj(w: Who, name: String): String = when (w) {
+        Who.FRIEND, Who.OTHER -> name + josa(name, "을", "를")
+        else -> if (josa(name, "a", "b") == "a") "${name}이를" else "${name}를"
+    }
 
     /** 명령마다 만들어 둘 이름 조합 */
     fun variants(c: Command): List<Pair<Who, Who>> = when (c.names) {
         "single" -> listOf(Who.NONE, Who.N1, Who.N2, Who.BOTH).map { it to Who.NONE }
-        "pair" -> listOf(Who.N1 to Who.N2, Who.N2 to Who.N1, Who.N1 to Who.FRIEND, Who.N2 to Who.FRIEND, Who.NONE to Who.FRIEND)
+        "pair" -> listOf(Who.N1 to Who.N2, Who.N2 to Who.N1, Who.N1 to Who.FRIEND, Who.N2 to Who.FRIEND, Who.NONE to Who.FRIEND,
+            Who.N1 to Who.OTHER, Who.N2 to Who.OTHER, Who.NONE to Who.OTHER)
         else -> listOf(Who.NONE to Who.NONE)
     }
 
@@ -124,11 +129,12 @@ object Scenario {
 
     private fun fill(s: String, c: Command, role: Role, actor: Who, target: Who): String {
         val name = nameOf(actor) ?: ""
-        val tgt = nameOf(target) ?: "친구"
-        return s.replace("{role}", role.label)
+        val tw = if (target == Who.NONE) Who.FRIEND else target
+        val tgt = nameOf(tw) ?: "친구"
+        return s.replace("{role}", role.call)
             .replace("{name}", name)
             .replace("{actor}", name)
-            .replace("{target_obj}", obj(tgt))
+            .replace("{target_obj}", obj(tw, tgt))
             .replace("{target}", tgt)
     }
 
@@ -158,7 +164,7 @@ object Scenario {
         val a = nameOf(actor)
         return when (c.names) {
             "single" -> c.label.replace("[이름]", a ?: "").replace("  ", " ").trim()
-            "pair" -> if (a == null) c.label.replace("[누가]가 [누구]", "누가 친구").trim()
+            "pair" -> if (a == null) c.label.replace("[누가]가 [누구]", "누가 " + (nameOf(target) ?: "친구")).trim()
             else c.label.replace("[누가]가", a + josa(a, "이가", "가")).replace("[누구]", nameOf(target) ?: "친구")
             else -> c.label
         }
@@ -177,7 +183,8 @@ object Scenario {
         val t = norm(text)
         if (t.isEmpty()) return null
         if (testMode && t.contains("마이크테스트")) return Match(TEST, Who.NONE, Who.NONE)
-        if (!t.contains("아저씨")) return null
+        // 음성 인식이 "이놈아 씨", "이노마 저씨"처럼 적는 경우도 받음
+        if (listOf("아저씨", "놈아씨", "노마저씨", "노마씨", "놈아저").none { t.contains(it) }) return null
         val c = commands.firstOrNull { cmd -> cmd.match.any { t.contains(it) } } ?: return null
 
         val n1 = norm(Prefs.name1).takeIf { it.isNotEmpty() }
@@ -191,11 +198,14 @@ object Scenario {
                 i2 >= 0 -> Who.N2
                 else -> Who.NONE
             }, Who.NONE)
-            "pair" -> when {
-                i1 >= 0 && i2 >= 0 -> if (i1 < i2) Match(c.id, Who.N1, Who.N2) else Match(c.id, Who.N2, Who.N1)
-                i1 >= 0 -> Match(c.id, Who.N1, Who.FRIEND)
-                i2 >= 0 -> Match(c.id, Who.N2, Who.FRIEND)
-                else -> Match(c.id, Who.NONE, Who.FRIEND)
+            "pair" -> {
+                val other = if (t.contains("다른사람") || t.contains("다른분") || t.contains("다른어른")) Who.OTHER else Who.FRIEND
+                when {
+                    i1 >= 0 && i2 >= 0 -> if (i1 < i2) Match(c.id, Who.N1, Who.N2) else Match(c.id, Who.N2, Who.N1)
+                    i1 >= 0 -> Match(c.id, Who.N1, other)
+                    i2 >= 0 -> Match(c.id, Who.N2, other)
+                    else -> Match(c.id, Who.NONE, other)
+                }
             }
             else -> Match(c.id, Who.NONE, Who.NONE)
         }
