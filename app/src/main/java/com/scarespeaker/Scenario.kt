@@ -75,7 +75,7 @@ object Scenario {
 
     val commands: List<Command> get() = load().first
     val tabs: List<Category> get() = load().second
-    val version: Int get() = 4
+    val version: Int get() = 5
 
     fun byId(id: String): Command? = commands.firstOrNull { it.id == id }
     fun categoryLabel(id: String): String = when (id) {
@@ -185,7 +185,9 @@ object Scenario {
         if (testMode && t.contains("마이크테스트")) return Match(TEST, Who.NONE, Who.NONE)
         // 음성 인식이 "이놈아 씨", "이노마 저씨"처럼 적는 경우도 받음
         if (listOf("아저씨", "놈아씨", "노마저씨", "노마씨", "놈아저").none { t.contains(it) }) return null
-        val c = commands.firstOrNull { cmd -> cmd.match.any { t.contains(it) } } ?: return null
+        // '밥+장난감' 처럼 '+'로 이은 조각은 모두 들어 있어야 함
+        val c = commands.firstOrNull { cmd -> cmd.match.any { m -> m.split('+').all { t.contains(it) } } } ?: return null
+        if (!Prefs.isEnabled(c.id)) { AppLog.d("꺼진 대사라 무시: ${c.id}"); return null }
 
         val n1 = norm(Prefs.name1).takeIf { it.isNotEmpty() }
         val n2 = norm(Prefs.name2).takeIf { it.isNotEmpty() }

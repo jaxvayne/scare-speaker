@@ -47,7 +47,8 @@ class ScareWidget : AppWidgetProvider() {
             if (ids.isEmpty()) return
             val v = RemoteViews(c.packageName, R.layout.widget)
             val on = ScareService.listening
-            v.setTextViewText(R.id.w_listen, if (on) "🎙 듣는 중 (끄기)" else "🎙 켜기")
+            v.setTextViewText(R.id.w_listen, if (on) "듣는 중 (끄기)" else "음성 인식 켜기")
+            v.setTextViewCompoundDrawables(R.id.w_listen, if (on) R.drawable.ic_mic_on else R.drawable.ic_mic_off, 0, 0, 0)
             v.setInt(R.id.w_listen, "setBackgroundResource", if (on) R.drawable.widget_btn_on else R.drawable.widget_btn)
             val listenPi = if (on) PendingIntent.getForegroundService(c, 11,
                 Intent(c, ScareService::class.java).setAction(ScareService.ACTION_LISTEN_OFF),
@@ -114,7 +115,7 @@ object Schedule {
             .setContentTitle("이놈아저씨 · 재울 시간이에요")
             .setContentText("탭하면 음성 인식이 켜져요")
             .setContentIntent(pi)
-            .addAction(0, "🎙 켜기", pi)
+            .addAction(0, "켜기", pi)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
@@ -131,6 +132,20 @@ class ScheduleReceiver : BroadcastReceiver() {
         if (!ScareService.listening) Schedule.notify(ctx)
         Schedule.apply(ctx) // 다음 예약
     }
+}
+
+/** 업데이트 내역 (assets/changelog.json) */
+object Changelog {
+    data class Entry(val version: Int, val name: String, val date: String, val items: List<String>)
+
+    fun all(ctx: Context): List<Entry> = try {
+        val a = org.json.JSONArray(ctx.assets.open("changelog.json").bufferedReader().readText())
+        List(a.length()) { i ->
+            val o = a.getJSONObject(i)
+            val it = o.getJSONArray("items")
+            Entry(o.getInt("version"), o.getString("name"), o.optString("date"), List(it.length()) { k -> it.getString(k) })
+        }
+    } catch (_: Exception) { emptyList() }
 }
 
 /** 새 버전 확인 (GitHub Release) */

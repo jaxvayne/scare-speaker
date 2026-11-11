@@ -169,6 +169,33 @@ object Prefs {
         get() = TestSound.valueOf(sp.getString("testSound", Rec.s("testSound", TestSound.COUNT.name))!!)
         set(v) = sp.edit().putString("testSound", v.name).apply()
 
+    // ----- 대사별 켜기/끄기 (기본: 모두 켜짐) -----
+    var disabledCmds: Set<String>
+        get() = sp.getString("disabledCmds", Rec.s("disabledCmds", ""))!!.split(',').filter { it.isNotBlank() }.toSet()
+        set(v) = sp.edit().putString("disabledCmds", v.joinToString(",")).apply()
+    fun isEnabled(id: String): Boolean = id !in disabledCmds
+    fun setEnabled(id: String, on: Boolean) { disabledCmds = if (on) disabledCmds - id else disabledCmds + id }
+
+    // ----- 출력 방식: Wi-Fi 기기 / 블루투스 스피커 (동시 사용 안 함) -----
+    var outputBt: Boolean
+        get() = sp.getBoolean("outputBt", Rec.b("outputBt", false))
+        set(v) = sp.edit().putBoolean("outputBt", v).apply()
+    /** 블루투스 재생 음량 (폰 미디어 음량 단계) */
+    var btVolume: Int
+        get() = sp.getInt("btVolume", Rec.i("btVolume", 5))
+        set(v) = sp.edit().putInt("btVolume", v.coerceAtLeast(0)).apply()
+    var btName: String
+        get() = sp.getString("btName", "")!!
+        set(v) = sp.edit().putString("btName", v).apply()
+
+    // ----- 업데이트 안내 -----
+    var lastSeenVersion: Int
+        get() = sp.getInt("lastSeenVersion", 0)
+        set(v) = sp.edit().putInt("lastSeenVersion", v).apply()
+    var hideWhatsNew: Boolean
+        get() = sp.getBoolean("hideWhatsNew", false)
+        set(v) = sp.edit().putBoolean("hideWhatsNew", v).apply()
+
     /** 기기 안 음성 인식 사용 (유튜브 멈춤 줄이기) */
     var onDeviceStt: Boolean
         get() = sp.getBoolean("onDeviceStt", Rec.b("onDeviceStt", true))
@@ -234,6 +261,7 @@ object Prefs {
         "dlnaName", "dlnaLocation", "tvCastHost", "tvCastPort", "dlnaVolume", "dlnaDelayMs",
         "restoreVolume", "effects", "dedupMode", "testSound", "muteBeep", "style", "ttsEngine", "ttsVoice",
         "autoListenOnOpen", "scheduleOn", "scheduleMinute", "scheduleDays", "autoPrepare",
+        "disabledCmds", "outputBt", "btVolume",
     )
 
     fun exportJson(): org.json.JSONObject = org.json.JSONObject()
@@ -248,6 +276,7 @@ object Prefs {
         .put("ttsEngine", ttsEngine).put("ttsVoice", ttsVoice).put("autoListenOnOpen", autoListenOnOpen)
         .put("scheduleOn", scheduleOn).put("scheduleMinute", scheduleMinute).put("scheduleDays", scheduleDays)
         .put("autoPrepare", autoPrepare)
+        .put("disabledCmds", disabledCmds.joinToString(",")).put("outputBt", outputBt).put("btVolume", btVolume)
 
     private const val CODE_PREFIX = "이놈아저씨설정:"
 
@@ -293,6 +322,9 @@ object Prefs {
         if (has("scheduleMinute")) scheduleMinute = j.getInt("scheduleMinute")
         if (has("scheduleDays")) scheduleDays = j.getInt("scheduleDays")
         if (has("autoPrepare")) autoPrepare = j.getBoolean("autoPrepare")
+        if (has("disabledCmds")) disabledCmds = j.getString("disabledCmds").split(',').filter { it.isNotBlank() }.toSet()
+        if (has("outputBt")) outputBt = j.getBoolean("outputBt")
+        if (has("btVolume")) btVolume = j.getInt("btVolume")
     }
 
     /** 추천 설정으로 맞추기: 공유 설정을 지워서 앱에 들어 있는 추천값을 쓰게 함 */

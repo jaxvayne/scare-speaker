@@ -16,6 +16,22 @@ import androidx.appcompat.app.AppCompatActivity
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var castLabel: TextView
+    private lateinit var wifiCard: LinearLayout
+    private lateinit var btCard: LinearLayout
+    private lateinit var btStatus: TextView
+    private val askBt = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) pickBt() else toast("블루투스 권한이 필요해요")
+    }
+    private val cdm = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode == RESULT_OK) {
+            @Suppress("DEPRECATION")
+            val d = r.data?.getParcelableExtra<android.bluetooth.BluetoothDevice>(android.companion.CompanionDeviceManager.EXTRA_DEVICE)
+            if (d != null) {
+                try { @Suppress("MissingPermission") d.createBond() } catch (_: Exception) {}
+                toast("페어링 중이에요. 완료되면 '연결하기'를 눌러 주세요")
+            }
+        }
+    }
     private lateinit var dlnaLabel: TextView
     private val steppers = mutableListOf<LinearLayout>()
 
@@ -43,8 +59,17 @@ class SettingsActivity : AppCompatActivity() {
         })
 
         // 재생 기기
-        root.addView(Ui.section(c, "재생할 기기"))
-        root.addView(Ui.radio(c, Target.values().toList(), { it.label }, Prefs.target) { Prefs.target = it })
+        root.addView(Ui.section(c, "출력 방식 (둘 중 하나만 사용)"))
+        wifiCard = Ui.card(c)
+        btCard = Ui.card(c)
+        wifiCard.setOnClickListener { setOutput(false) }
+        btCard.setOnClickListener { setOutput(true) }
+        val wTitle = Ui.row(c)
+        wTitle.addView(android.widget.ImageView(c).apply { setImageResource(R.drawable.ic_wifi) }, LinearLayout.LayoutParams(Ui.dp(c, 28), Ui.dp(c, 28)))
+        wTitle.addView(Ui.text(c, "  Wi-Fi 기기", 16f, Ui.TEXT))
+        wifiCard.addView(wTitle)
+        wifiCard.addView(Ui.text(c, "같은 Wi-Fi에서만 사용 가능", 12f))
+        wifiCard.addView(Ui.radio(c, Target.values().toList(), { it.label }, Prefs.target) { Prefs.target = it; setOutput(false) })
 
         castLabel = Ui.text(c, "", 14f, Ui.TEXT)
         dlnaLabel = Ui.text(c, "", 14f, Ui.TEXT)
@@ -55,10 +80,28 @@ class SettingsActivity : AppCompatActivity() {
         val dlnaRow = Ui.row(c)
         dlnaRow.addView(dlnaLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         dlnaRow.addView(Ui.smallButton(c, "찾기") { pickDlna() })
-        root.addView(castRow)
-        root.addView(Ui.spacer(c, 6))
-        root.addView(dlnaRow)
+        wifiCard.addView(castRow)
+        wifiCard.addView(Ui.spacer(c, 6))
+        wifiCard.addView(dlnaRow)
         updateDeviceLabels()
+        root.addView(wifiCard)
+        root.addView(Ui.spacer(c, 10))
+
+        val bTitle = Ui.row(c)
+        bTitle.addView(android.widget.ImageView(c).apply { setImageResource(R.drawable.ic_bluetooth) }, LinearLayout.LayoutParams(Ui.dp(c, 28), Ui.dp(c, 28)))
+        bTitle.addView(Ui.text(c, "  블루투스 스피커", 16f, Ui.TEXT))
+        btCard.addView(bTitle)
+        btStatus = Ui.text(c, "", 13f)
+        btCard.addView(btStatus)
+        val br = Ui.row(c).apply { setPadding(0, Ui.dp(c, 8), 0, 0) }
+        br.addView(Ui.smallButton(c, "연결하기") { pickBt() }, LinearLayout.LayoutParams(0, Ui.dp(c, 46), 1f).apply { rightMargin = Ui.dp(c, 6) })
+        br.addView(Ui.smallButton(c, "새 스피커 추가") { addBt() }, LinearLayout.LayoutParams(0, Ui.dp(c, 46), 1f))
+        btCard.addView(br)
+        btCard.addView(Ui.stepper(c, "블루투스 음량", { "${Prefs.btVolume} / ${Player.btMaxVolume()}" },
+            { Prefs.btVolume = Prefs.btVolume - 1 }, { Prefs.btVolume = (Prefs.btVolume + 1).coerceAtMost(Player.btMaxVolume()) }))
+        btCard.addView(Ui.text(c, "연결이 안 되어 있으면 폰 스피커로 새지 않게 재생하지 않아요.", 12f))
+        root.addView(btCard)
+        drawOutput()
 
         // 음량
         root.addView(Ui.section(c, "재생 음량 (기기 최소 단위)"))
@@ -136,11 +179,24 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(Ui.spacer(c, 6))
         root.addView(Ui.smallButton(c, "📥 설정 코드 붙여넣기") { pasteSettings() })
         root.addView(Ui.spacer(c, 6))
-        root.addView(Ui.smallButton(c, "⭐ 추천 설정으로 맞추기") { resetRecommended() })
+        root.addView(Ui.smallButton(c, "⭐ 기본 설정으로 되돌리기") { resetRecommended() })
         root.addView(Ui.text(c, "사용자(아빠/엄마/할머니)는 공유되지 않아요. 각자 고르세요.", 12f))
+
+        // 대사 켜기/끄기
+        root.addView(Ui.section(c, "대사 켜기/끄기"))
+        root.addView(Ui.text(c, "꺼진 대사는 버튼을 눌러도, 말해도 재생되지 않아요.", 12f))
+        for (cat in Scenario.tabs.map { it.id } + "end") {
+            root.addView(Ui.text(c, Scenario.categoryLabel(cat), 14f, Ui.TEXT).apply { setPadding(0, Ui.dp(c, 10), 0, 0) })
+            for (cmd in Scenario.commands.filter { it.category == cat }) {
+                root.addView(Ui.switch(c, cmd.label.replace("[이름]", "○○").replace("[누가]가 [누구]", "○○가 ○○"), Prefs.isEnabled(cmd.id)) { on -> Prefs.setEnabled(cmd.id, on) }
+                    .apply { textSize = 14f })
+            }
+        }
 
         // 기타
         root.addView(Ui.section(c, "기타"))
+        root.addView(Ui.smallButton(c, "📝 업데이트 내역") { showChangelog() })
+        root.addView(Ui.spacer(c, 8))
         root.addView(Ui.smallButton(c, "진단 기록 보기") { showLog() })
         root.addView(Ui.spacer(c, 8))
         root.addView(Ui.smallButton(c, "음성 다시 만들기") {
@@ -284,15 +340,92 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun resetRecommended() {
-        AlertDialog.Builder(this).setTitle("추천 설정으로 맞출까요?")
-            .setMessage("음량·기기·목소리 등 공유 설정이 앱에 들어 있는 추천값으로 바뀌어요. (사용자는 그대로)")
+        AlertDialog.Builder(this).setTitle("기본 설정으로 되돌릴까요?")
+            .setMessage("음량·기기·목소리·대사 켜기/끄기 등이 기본(추천) 설정으로 돌아가요. (사용자는 그대로)")
             .setPositiveButton("맞추기") { _, _ ->
                 Prefs.resetToRecommended()
                 Schedule.apply(this)
-                toast("추천 설정으로 맞췄어요")
+                toast("기본 설정으로 되돌렸어요")
                 recreate()
             }
             .setNegativeButton("취소", null).show()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::btStatus.isInitialized) drawOutput()
+    }
+
+    // ---------------- 출력 방식 ----------------
+
+    private fun setOutput(bt: Boolean) {
+        Prefs.outputBt = bt
+        drawOutput()
+    }
+
+    private fun drawOutput() {
+        val bt = Prefs.outputBt
+        wifiCard.background = Ui.rounded(if (!bt) 0xFF23324A.toInt() else Ui.CARD, 16, this)
+        btCard.background = Ui.rounded(if (bt) 0xFF23324A.toInt() else Ui.CARD, 16, this)
+        wifiCard.alpha = if (bt) 0.5f else 1f
+        btCard.alpha = if (bt) 1f else 0.5f
+        val n = Bt.connectedSpeaker(this)
+        btStatus.text = (if (bt) "✓ 사용 중 · " else "눌러서 사용 · ") + (if (n != null) "$n 연결됨" else "연결 안 됨")
+    }
+
+    private fun pickBt() {
+        if (!Bt.hasPermission(this)) { askBt.launch(android.Manifest.permission.BLUETOOTH_CONNECT); return }
+        if (!Bt.isOn(this)) { toast("블루투스를 켜 주세요"); Bt.openSettings(this); return }
+        val list = Bt.pairedAudio(this)
+        if (list.isEmpty()) { toast("페어링된 스피커가 없어요. '새 스피커 추가'를 눌러 주세요"); return }
+        val now = Bt.connectedSpeaker(this)
+        AlertDialog.Builder(this).setTitle("블루투스 스피커 연결")
+            .setItems(list.map { val nm = Bt.nameOf(it); if (nm == now) "$nm (연결됨)" else nm }.toTypedArray()) { _, i ->
+                val d = list[i]
+                Prefs.btName = Bt.nameOf(d)
+                toast("${Bt.nameOf(d)} 연결 중…")
+                Bt.connect(this, d) { ok ->
+                    runOnUiThread {
+                        if (ok) {
+                            setOutput(true)
+                            btStatus.postDelayed({ drawOutput() }, 3000)
+                        } else {
+                            AlertDialog.Builder(this).setTitle("폰 설정에서 연결해 주세요")
+                                .setMessage("이 폰은 앱에서 바로 연결하는 걸 막아 두었어요. 블루투스 설정에서 '${Bt.nameOf(d)}'를 눌러 연결한 뒤 돌아와 주세요.")
+                                .setPositiveButton("블루투스 설정 열기") { _, _ -> setOutput(true); Bt.openSettings(this) }
+                                .setNegativeButton("취소", null).show()
+                        }
+                    }
+                }
+            }.show()
+    }
+
+    /** 새 스피커 찾기 + 페어링 (안드로이드 기기 선택 창) */
+    private fun addBt() {
+        try {
+            val mgr = getSystemService(android.companion.CompanionDeviceManager::class.java)
+            val req = android.companion.AssociationRequest.Builder()
+                .addDeviceFilter(android.companion.BluetoothDeviceFilter.Builder().build())
+                .setSingleDevice(false).build()
+            @Suppress("DEPRECATION")
+            mgr.associate(req, object : android.companion.CompanionDeviceManager.Callback() {
+                override fun onDeviceFound(chooserLauncher: android.content.IntentSender) {
+                    cdm.launch(androidx.activity.result.IntentSenderRequest.Builder(chooserLauncher).build())
+                }
+                override fun onFailure(error: CharSequence?) { runOnUiThread { toast("기기를 찾지 못했어요. 스피커를 페어링 모드로 켜 주세요") } }
+            }, null)
+        } catch (e: Exception) {
+            AppLog.d("새 스피커 추가 실패: ${e.message}")
+            Bt.openSettings(this)
+        }
+    }
+
+    private fun showChangelog() {
+        val text = Changelog.all(this).joinToString("\n\n") { e -> "■ ${e.name}  (${e.date})\n" + e.items.joinToString("\n") { "• $it" } }
+        val tv = Ui.text(this, text, 14f, Ui.TEXT).apply { setPadding(48, 24, 48, 24) }
+        AlertDialog.Builder(this).setTitle("📝 업데이트 내역")
+            .setView(ScrollView(this).apply { addView(tv) })
+            .setPositiveButton("닫기", null).show()
     }
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()

@@ -36,10 +36,16 @@ object Player {
      * 재생 시작. 기기 연결까지 기다린 뒤 돌아온다. 끝나면 onFinished가 불린다.
      * @return 한 기기라도 재생을 시작했으면 true
      */
+    /** 마지막 실패 이유 (화면 안내용) */
+    @Volatile var lastError = ""
+
     fun start(ctx: Context, file: File, title: String, key: String, onFinished: () -> Unit): Boolean {
+        lastError = ""
+        if (Prefs.outputBt) return startBluetooth(ctx, file, title, key, onFinished)
         SoundServer.ensure(Scenario.clipsDir(ctx))
         if (!atHome()) {
             AppLog.d("집 Wi-Fi가 아니라 재생하지 않음 (폰 주소 ${SoundServer.localIp()})")
+            lastError = "집 Wi-Fi가 아니라 재생하지 않았어요"
             return false
         }
         val url = SoundServer.urlFor(file) ?: run {
@@ -108,6 +114,7 @@ object Player {
     /** 바로 멈춤 */
     fun stop(restore: Boolean) {
         generation.incrementAndGet()
+        if (btPlayer != null) { btFinish(restore); return }
         stopDevices()
         finish(restore)
     }
@@ -115,6 +122,11 @@ object Player {
     /** 1초 동안 소리를 줄이며 멈춤 (오지 마세요/안녕히 가세요 앞에서 사용) */
     fun fadeOutAndStop() {
         generation.incrementAndGet()
+        btPlayer?.let { mp ->
+            for (i in 1..5) { try { val k = (1f - i / 5f); mp.setVolume(k, k) } catch (_: Exception) {}; Thread.sleep(200) }
+            btFinish(restore = false)
+            return
+        }
         val c = activeCast
         val tv = activeTvCast
         val startCast = Prefs.castVolume
@@ -356,7 +368,7 @@ object Player {
 
     /** 스피커/스탠바이미를 재생할 수 있게 준비. 사용 중인 기기는 건드리지 않음 */
     fun prepareDevices(ctx: Context) {
-        if (!atHome()) { checkDevices(ctx); return }
+        if (Prefs.outputBt || !atHome()) { checkDevices(ctx); return }
         if (useCast()) {
             try {
                 connectCast(ctx)?.let { c ->
@@ -377,6 +389,13 @@ object Player {
     /** 지금 시점의 두 기기 상태 확인 (깨우지는 않음) */
     fun checkDevices(ctx: Context) {
         val lines = mutableListOf<String>()
+        if (Prefs.outputBt) {
+            val t = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.KOREA).format(java.util.Date())
+            val n = Bt.connectedSpeaker(ctx)
+            deviceStatus = (if (n != null) "블루투스: $n 연결됨 ✓" else "블루투스: 연결 안 됨 (설정에서 연결)") + "\n($t 기준 · 출력: 블루투스)"
+            AppLog.d("기기 상태: " + deviceStatus.replace("\n", " / "))
+            return
+        }
         if (!atHome()) {
             deviceStatus = "🏠 집 Wi-Fi가 아니에요 (폰 주소 ${SoundServer.localIp() ?: "없음"})"
             AppLog.d("기기 상태: 집 Wi-Fi 아님")
@@ -428,4 +447,78 @@ object Player {
         wokeSpeaker = false
         prepared = false
     }
+
+    // ---------- 블루투스 스피커 ----------
+
+    @Volatile private var btPlayer: android.media.MediaPlayer? = null
+    @Volatile private var btSavedVol: Int? = null
+
+    private fun startBluetooth(ctx: Context, file: File, title: String, key: String, onFinished: () -> Unit): Boolean {
+        val name = Bt.connectedSpeaker(ctx)
+        if (name == null) {
+            // 안전장치: 폰 스피커로 소리가 나가지 않게 재생하지 않음
+            lastError = "블루투스 스피커가 연결되어 있지 않습니다"
+            AppLog.d("블루투스 스피커가 연결되어 있지 않아 재생하지 않음")
+            return false
+        }
+        val gen = generation.incrementAndGet()
+        btPlayer?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
+        btPlayer = null
+        val am = ctx.getSystemService(android.media.AudioManager::class.java)
+        try { am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_UNMUTE, 0) } catch (_: Exception) {}
+        if (btSavedVol == null) btSavedVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+        try { am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Prefs.btVolume.coerceIn(0, max), 0) } catch (_: Exception) {}
+        val mp = android.media.MediaPlayer()
+        return try {
+            mp.setAudioAttributes(android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            mp.setDataSource(file.absolutePath)
+            mp.prepare()
+            mp.setOnCompletionListener {
+                exec.execute {
+                    Thread.sleep(300)
+                    if (generation.get() == gen) { btFinish(restore = true); onFinished() }
+                }
+            }
+            btPlayer = mp
+            mp.start()
+            playing = true
+            playingTitle = title
+            AppLog.d("블루투스 재생: $title → $name (음량 ${Prefs.btVolume}/$max)")
+            Dedup.announcePlay(key, (Wav.durationSec(file) * 1000).toLong() + 500, null, null)
+            true
+        } catch (e: Exception) {
+            AppLog.d("블루투스 재생 실패: ${e.message}")
+            lastError = "블루투스 재생에 실패했어요"
+            try { mp.release() } catch (_: Exception) {}
+            btPlayer = null
+            false
+        }
+    }
+
+    private fun btFinish(restore: Boolean) {
+        btPlayer?.let { try { it.stop() } catch (_: Exception) {}; try { it.release() } catch (_: Exception) {} }
+        btPlayer = null
+        if (restore) {
+            val am = App.instance.getSystemService(android.media.AudioManager::class.java)
+            if (Prefs.restoreVolume) btSavedVol?.let { v ->
+                try { am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, v, 0) } catch (_: Exception) {}
+            }
+            btSavedVol = null
+            ScareService.running?.remuteIfListening()
+        }
+        playing = false
+        playingTitle = ""
+    }
+
+    fun applyLiveBtVolume() {
+        if (btPlayer == null) return
+        val am = App.instance.getSystemService(android.media.AudioManager::class.java)
+        try { am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Prefs.btVolume, 0) } catch (_: Exception) {}
+    }
+
+    fun btMaxVolume(): Int = App.instance.getSystemService(android.media.AudioManager::class.java)
+        .getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
 }

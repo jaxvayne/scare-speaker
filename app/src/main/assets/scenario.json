@@ -1,6 +1,6 @@
 {
-  "version": 4,
-  "note": "대사와 키워드 정의. 안드로이드/아이폰 앱이 함께 쓸 수 있도록 데이터로 분리. match는 위에서부터 먼저 검사함. {role}=호칭, {name}=이름, {actor}=누가, {target}=누구(조사 없음), {target_obj}=누구를",
+  "version": 5,
+  "note": "대사와 키워드 정의. 안드로이드/아이폰 앱이 함께 쓸 수 있도록 데이터로 분리. match는 위에서부터 먼저 검사함. {role}=호칭, {name}=이름, {actor}=누가, {target}=누구(조사 없음), {target_obj}=누구를 match에 '+'가 있으면 모든 조각이 들어 있어야 함 (예: 밥+장난감).",
   "categories": [
     {
       "id": "sleep",
@@ -12,7 +12,7 @@
     },
     {
       "id": "bully",
-      "label": "🤝 괴롭힘"
+      "label": "👊 괴롭힘"
     },
     {
       "id": "habit",
@@ -297,6 +297,160 @@
       ]
     },
     {
+      "id": "BITE",
+      "category": "habit",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 칫솔 물어요 / 깨물어요",
+      "match": [
+        "칫솔물",
+        "칫솔을물",
+        "칫솔깨물",
+        "깨물어",
+        "칫솔씹"
+      ],
+      "display": "이노옴~!! 누가 칫솔 깨무니!! {name}! 칫솔 물면 안 된다!! 입 벌려라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 칫솔 깨무니!",
+        "{name}!",
+        "칫솔 물면 안 된다!",
+        "입 벌려라!"
+      ]
+    },
+    {
+      "id": "BRUSH_AH",
+      "category": "habit",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 아~ 안 해요",
+      "match": [
+        "아안해",
+        "입안벌",
+        "입을안벌",
+        "아하기싫",
+        "아아안해"
+      ],
+      "display": "이노옴~!! 누가 아~ 안 하니!! {name}! 입 크게 아~ 해라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 아아, 안 하니!",
+        "{name}!",
+        "입 크게, 아아 해라!"
+      ]
+    },
+    {
+      "id": "BRUSH_EE",
+      "category": "habit",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 이~ 안 해요",
+      "match": [
+        "이안해",
+        "이하기싫",
+        "이이안해"
+      ],
+      "display": "이노옴~!! 누가 이~ 안 하니!! {name}! 이~ 하고 이 보여줘라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 이이, 안 하니!",
+        "{name}!",
+        "이이 하고, 이 보여줘라!"
+      ]
+    },
+    {
+      "id": "MEAL_TOY",
+      "category": "meal",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 밥 먹을 때 장난감 가지고 놀아요",
+      "match": [
+        "밥+장난감"
+      ],
+      "display": "이노옴~!! 누가 밥 먹을 때 장난감 가지고 노니!! {name}! 장난감 내려놓고 얼른 밥 먹어라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 밥 먹을 때 장난감 가지고 노니!",
+        "{name}!",
+        "장난감 내려놓고, 얼른 밥 먹어라!"
+      ]
+    },
+    {
+      "id": "TOY",
+      "category": "sleep",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] (잘 때) 장난감 가지고 놀아요",
+      "match": [
+        "장난감"
+      ],
+      "display": "이노옴~!! 누가 잘 때 장난감 가지고 장난치니!! {name}! 빨리 안 자면 아저씨가 잡아간다!!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 잘 때 장난감 가지고 장난치니!",
+        "{name}!",
+        "빨리 안 자면, 아저씨가 잡아간다!"
+      ]
+    },
+    {
+      "id": "MEAL_PLAY",
+      "category": "meal",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 밥 안 먹고 장난쳐요",
+      "match": [
+        "밥+장난"
+      ],
+      "display": "이노옴~!! 누가 밥 먹을 때 장난치니!! {name}! 장난 그만하고 얼른 밥 먹어라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 밥 먹을 때 장난치니!",
+        "{name}!",
+        "장난 그만하고, 얼른 밥 먹어라!"
+      ]
+    },
+    {
+      "id": "SLEEP_PLAY",
+      "category": "sleep",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 잠 안 자고 장난쳐요",
+      "match": [
+        "장난쳐",
+        "장난처",
+        "장난해",
+        "장난하"
+      ],
+      "display": "이노옴~!! 누가 잘 시간에 장난치니!! {name}! 장난치는 아이는 아저씨가 잡아간다!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 잘 시간에 장난치니!",
+        "{name}!",
+        "장난치는 아이는, 아저씨가 잡아간다!"
+      ]
+    },
+    {
+      "id": "BEDTIME",
+      "category": "sleep",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 자러 안 가요 / 안 자러 가요",
+      "match": [
+        "자러안가",
+        "안자러가",
+        "자러가기싫",
+        "자러안간",
+        "방에안가"
+      ],
+      "display": "이노옴~!! 누가 자러 안 가니!! {name}! 얼른 방에 들어가서 자라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 자러 안 가니!",
+        "{name}!",
+        "얼른 방에 들어가서 자라!"
+      ]
+    },
+    {
       "id": "TAKE",
       "category": "sleep",
       "names": "single",
@@ -314,25 +468,6 @@
       "tts": [
         "{name}!",
         "이놈아저씨가, 잡아가야겠다!"
-      ]
-    },
-    {
-      "id": "TOY",
-      "category": "sleep",
-      "names": "single",
-      "role": false,
-      "keyword": "이놈아저씨 [이름] 장난감 가지고 놀아요 / 장난쳐요",
-      "match": [
-        "장난감",
-        "장난쳐",
-        "장난처"
-      ],
-      "display": "이노옴~!! 누가 잘 때 장난감 가지고 장난치니!! {name}! 빨리 안 자면 아저씨가 잡아간다!!!",
-      "call": "이노오오옴",
-      "tts": [
-        "누가 잘 때 장난감 가지고 장난치니!",
-        "{name}!",
-        "빨리 안 자면, 아저씨가 잡아간다!"
       ]
     },
     {
@@ -480,6 +615,27 @@
       ]
     },
     {
+      "id": "STOMP",
+      "category": "habit",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 발 굴러요",
+      "match": [
+        "발굴러",
+        "발구르",
+        "발을굴러",
+        "발을구르",
+        "쿵쿵"
+      ],
+      "display": "이노옴~!! 누가 쿵쿵 발 구르니!! {name}! 발 구르는 아이는 아저씨가 잡아간다!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 쿵쿵 발 구르니!",
+        "{name}!",
+        "발 구르는 아이는, 아저씨가 잡아간다!"
+      ]
+    },
+    {
       "id": "WHINE",
       "category": "habit",
       "names": "single",
@@ -532,6 +688,8 @@
         "COME",
         "TAKE",
         "NOSLEEP",
+        "BEDTIME",
+        "SLEEP_PLAY",
         "TOY"
       ]
     },
@@ -540,7 +698,9 @@
       "order": [
         "NOEAT",
         "WANDER",
-        "PICKY"
+        "PICKY",
+        "MEAL_PLAY",
+        "MEAL_TOY"
       ]
     },
     {
@@ -556,7 +716,11 @@
       "order": [
         "THUMB",
         "BRUSH",
+        "BRUSH_AH",
+        "BRUSH_EE",
+        "BITE",
         "TANTRUM",
+        "STOMP",
         "WHINE"
       ]
     },

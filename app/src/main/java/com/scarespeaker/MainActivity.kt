@@ -28,6 +28,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var testPanel: LinearLayout
     private lateinit var tabRow: LinearLayout
     private lateinit var tabBody: LinearLayout
+    private lateinit var endBox: LinearLayout
     private lateinit var testBtn: android.widget.Button
     private val allButtons = mutableListOf<View>()
 
@@ -79,6 +80,29 @@ class MainActivity : AppCompatActivity() {
             ScareService.send(this, ScareService.ACTION_LISTEN_ON)
         }
         checkUpdate(false)
+        showWhatsNew()
+    }
+
+    private fun currentCode(): Int = try {
+        val pi = packageManager.getPackageInfo(packageName, 0)
+        @Suppress("DEPRECATION")
+        (if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode.toInt() else pi.versionCode)
+    } catch (_: Exception) { 0 }
+
+    /** 업데이트 후 처음 열면 바뀐 점 안내 */
+    private fun showWhatsNew() {
+        val code = currentCode()
+        if (Prefs.lastSeenVersion >= code) return
+        if (Prefs.lastSeenVersion == 0 || Prefs.hideWhatsNew) { Prefs.lastSeenVersion = code; return }
+        val news = Changelog.all(this).filter { it.version in (Prefs.lastSeenVersion + 1)..code }
+        Prefs.lastSeenVersion = code
+        if (news.isEmpty()) return
+        val text = news.joinToString("\n\n") { e -> "■ ${e.name}\n" + e.items.joinToString("\n") { "• $it" } }
+        AlertDialog.Builder(this).setTitle("새로워진 점")
+            .setMessage(text)
+            .setPositiveButton("확인", null)
+            .setNegativeButton("다시 보지 않기") { _, _ -> Prefs.hideWhatsNew = true }
+            .show()
     }
 
     override fun onPause() {
@@ -103,7 +127,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(status)
 
         val modes = Ui.card(c)
-        listenSwitch = Ui.switch(c, "🎙 음성 인식 모드", false) { on ->
+        listenSwitch = Ui.switch(c, "음성 인식 모드", false) { on ->
             if (updatingSwitches) return@switch
             if (on) {
                 if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -119,7 +143,8 @@ class MainActivity : AppCompatActivity() {
             Prefs.testMode = on
             refresh()
         }
-        prepareSwitch = Ui.switch(c, "🔌 기기 준비 (스피커·TV)", false) { on ->
+        listenSwitch.compoundDrawablePadding = Ui.dp(c, 10)
+        prepareSwitch = Ui.switch(c, "🔌 기기 준비", false) { on ->
             if (updatingSwitches) return@switch
             ScareService.send(c, if (on) ScareService.ACTION_PREPARE_ON else ScareService.ACTION_PREPARE_OFF)
         }
@@ -143,9 +168,8 @@ class MainActivity : AppCompatActivity() {
 
         // 마무리 (항상 보임)
         root.addView(Ui.text(c, "🚪 마무리", 14f).apply { setPadding(0, Ui.dp(c, 8), 0, Ui.dp(c, 6)) })
-        for (cmd in Scenario.commands.filter { it.category == "end" }.reversed()) {
-            root.addView(Ui.bigButton(c, cmd.label, Ui.RED_DARK, 60) { play(cmd.id, Who.NONE, Who.NONE) }.also { allButtons += it })
-        }
+        endBox = Ui.column(c)
+        root.addView(endBox)
 
         // 테스트 패널
         testPanel = Ui.card(c)
@@ -155,6 +179,9 @@ class MainActivity : AppCompatActivity() {
         testPanel.addView(testBtn)
         testPanel.addView(Ui.stepper(c, "스피커 음량", Ui::castVolumeText, Ui::castMinus, Ui::castPlus))
         testPanel.addView(Ui.stepper(c, "스탠바이미 음량", { "${Prefs.dlnaVolume}" }, Ui::dlnaMinus, Ui::dlnaPlus))
+        testPanel.addView(Ui.stepper(c, "블루투스 음량", { "${Prefs.btVolume} / ${Player.btMaxVolume()}" },
+            { Prefs.btVolume = Prefs.btVolume - 1; Player.applyLiveBtVolume() },
+            { Prefs.btVolume = (Prefs.btVolume + 1).coerceAtMost(Player.btMaxVolume()); Player.applyLiveBtVolume() }))
         testPanel.addView(Ui.stepper(c, "스탠바이미 지연", Ui::delayText,
             { Prefs.dlnaDelayMs -= 10 }, { Prefs.dlnaDelayMs += 10 }))
         testPanel.addView(Ui.text(c, "지연: 스탠바이미가 늦게 들리면 −, 빨리 들리면 + (다음 재생부터 적용)", 12f))
@@ -190,6 +217,25 @@ class MainActivity : AppCompatActivity() {
         return box
     }
 
+    /** 대사 버튼 + 오른쪽에 분리된 켜짐/꺼짐 버튼 */
+    private fun lineRow(cmd: Command, title: String, color: Int, onPlay: () -> Unit): LinearLayout {
+        val on = Prefs.isEnabled(cmd.id)
+        val r = Ui.row(this).apply { setPadding(0, 0, 0, Ui.dp(this@MainActivity, 10)) }
+        val b = Ui.bigButton(this, title, if (on) color else 0xFF2E2E36.toInt()) {
+            if (!Prefs.isEnabled(cmd.id)) android.widget.Toast.makeText(this, "꺼진 대사예요. 오른쪽 버튼으로 켜 주세요", android.widget.Toast.LENGTH_SHORT).show()
+            else onPlay()
+        }
+        if (!on) b.setTextColor(0xFF77778A.toInt())
+        b.isEnabled = !generating
+        r.addView(b, LinearLayout.LayoutParams(0, Ui.dp(this, 68), 1f))
+        val tg = Ui.smallButton(this, if (on) "켜짐" else "꺼짐", if (on) Ui.GREEN else 0xFF55555F.toInt()) {
+            Prefs.setEnabled(cmd.id, !Prefs.isEnabled(cmd.id)); rebuildTab()
+        }
+        tg.textSize = 13f
+        r.addView(tg, LinearLayout.LayoutParams(Ui.dp(this, 64), Ui.dp(this, 44)).apply { leftMargin = Ui.dp(this@MainActivity, 10) })
+        return r
+    }
+
     private fun rebuildTab() {
         tabRow.removeAllViews()
         // 탭이 많으면 한 줄에 3개씩
@@ -204,6 +250,10 @@ class MainActivity : AppCompatActivity() {
             }
             repeat(3 - chunk.size) { r.addView(android.view.View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
             tabRow.addView(r)
+        }
+        endBox.removeAllViews()
+        for (cmd in Scenario.commands.filter { it.category == "end" }.reversed()) {
+            endBox.addView(lineRow(cmd, cmd.label, Ui.RED_DARK) { play(cmd.id, Who.NONE, Who.NONE) })
         }
         tabBody.removeAllViews()
         val cat = Scenario.tabs.firstOrNull { it.id == tab } ?: return
@@ -229,32 +279,42 @@ class MainActivity : AppCompatActivity() {
                 "pair" -> actor to target
                 else -> Who.NONE to Who.NONE
             }
-            val b = Ui.bigButton(this, Scenario.title(cmd, a, t), Ui.RED) { play(cmd.id, a, t) }
-            b.isEnabled = !generating
-            tabBody.addView(b)
+            tabBody.addView(lineRow(cmd, Scenario.title(cmd, a, t), Ui.RED) { play(cmd.id, a, t) })
         }
     }
 
     private fun refresh() {
         updatingSwitches = true
         listenSwitch.isChecked = ScareService.listening
+        listenSwitch.setCompoundDrawablesWithIntrinsicBounds(
+            if (ScareService.listening) R.drawable.ic_mic_on else R.drawable.ic_mic_off, 0, 0, 0)
         prepareSwitch.isChecked = ScareService.devicesOn
         testSwitch.isChecked = Prefs.testMode
         updatingSwitches = false
         testPanel.visibility = if (Prefs.testMode) View.VISIBLE else View.GONE
         testBtn.text = "▶ 테스트 재생 (${Prefs.testSound.label})"
-        val lines = mutableListOf("사용자: ${Prefs.role.label}  ·  재생: ${Prefs.target.label}")
-        if (ScareService.listening) lines += "🎙 듣는 중" + (if (Prefs.testMode) " (테스트 모드)" else "") + " · ${Prefs.autoOffMin}분 동안 명령 없으면 꺼짐"
+        val out = if (Prefs.outputBt) "블루투스 스피커" else "Wi-Fi · ${Prefs.target.label}"
+        val lines = mutableListOf("사용자: ${Prefs.role.label}  ·  출력: $out")
+        if (ScareService.listening) lines += "● 듣는 중" + (if (Prefs.testMode) " (테스트 모드)" else "") + " · ${Prefs.autoOffMin}분 동안 명령 없으면 꺼짐"
         if (ScareService.currentTitle.isNotEmpty()) { lines += "▶ ${ScareService.currentTitle}"; requested = "" }
         else if (requested.isNotEmpty()) lines += "⏳ $requested 재생 준비 중…"
         if (generating) lines += "음성 준비 중…"
         status.text = lines.joinToString("\n")
+        if (ScareService.lastError.isNotEmpty()) {
+            val msg = ScareService.lastError
+            ScareService.lastError = ""
+            requested = ""
+            if (!isFinishing) AlertDialog.Builder(this).setTitle("재생하지 않았어요").setMessage(msg)
+                .setPositiveButton("확인", null)
+                .apply { if (msg.contains("블루투스")) setNeutralButton("블루투스 설정") { _, _ -> startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) } }
+                .show()
+        }
         deviceText.text = when {
             ScareService.preparing -> "기기 확인 중…"
             Player.deviceStatus.isNotEmpty() -> Player.deviceStatus
             else -> "🔍 상태 확인을 누르면 스피커와 스탠바이미 상태를 보여줘요"
         }
-        for (b in allButtons) b.isEnabled = !generating
+
     }
 
     private fun play(cmd: String, a: Who, t: Who) {
@@ -354,6 +414,11 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------- 사용자 선택 / 음성 만들기 ----------------
 
+    private fun openGoogleTts() {
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$GOOGLE_TTS"))) }
+        catch (_: Exception) { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$GOOGLE_TTS"))) }
+    }
+
     private fun chooseRole(first: Boolean) {
         val roles = Role.values()
         AlertDialog.Builder(this)
@@ -381,6 +446,18 @@ class MainActivity : AppCompatActivity() {
             var err: String? = null
             try {
                 ClipGenerator(applicationContext).generateAll { p -> runOnUiThread { msg.text = p } }
+            } catch (e: VoiceMissing) {
+                runOnUiThread {
+                    generating = false
+                    try { dlg.dismiss() } catch (_: Exception) {}
+                    refresh(); rebuildTab()
+                    AlertDialog.Builder(this).setTitle("구글 음성 엔진이 필요해요")
+                        .setMessage("${e.message}\n\n가족 모두 같은 목소리로 들으려면 'Google 음성 인식 및 합성'을 설치하거나 업데이트해 주세요. 설치 후 앱으로 돌아오면 다시 만들어요.")
+                        .setPositiveButton("설치하러 가기") { _, _ -> openGoogleTts() }
+                        .setNegativeButton("이 폰 기본 목소리로 만들기") { _, _ -> Prefs.ttsVoice = ""; ensureClips() }
+                        .show()
+                }
+                return@Thread
             } catch (e: Exception) {
                 err = e.message
                 AppLog.d("음성 만들기 실패: ${e.message}")

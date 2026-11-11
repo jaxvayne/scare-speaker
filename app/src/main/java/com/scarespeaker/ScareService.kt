@@ -128,6 +128,10 @@ class ScareService : Service() {
             toast("음성 파일이 아직 없어요. 앱을 열어 음성 만들기를 해 주세요")
             return
         }
+        if (c != null && !Prefs.isEnabled(c.id)) {
+            toast("꺼진 대사예요 (켜기/끄기 버튼으로 켤 수 있어요)")
+            return
+        }
         val stops = c?.stops == true
         val title = if (c == null) "테스트: ${Prefs.testSound.label}" else Scenario.title(c, actor, target)
 
@@ -168,7 +172,9 @@ class ScareService : Service() {
         if (!ok) {
             currentTitle = ""
             ignoreUntil = 0
-            toast(if (!Player.atHome()) "집 Wi-Fi가 아니라 재생하지 않았어요" else "재생하지 못했어요. 설정 > 진단 기록을 확인해 주세요")
+            val why = Player.lastError.ifEmpty { "재생하지 못했어요. 설정 > 진단 기록을 확인해 주세요" }
+            lastError = why
+            toast(why)
             notifyChanged()
             main.post { stopIfIdle() }
         }
@@ -375,12 +381,12 @@ class ScareService : Service() {
         if (listening) {
             val offAt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA)
                 .format(java.util.Date(lastActivity + Prefs.autoOffMin * 60_000L))
-            lines += "🎙 음성 인식 중" + (if (Prefs.testMode) " · 테스트 모드" else "") + " · $offAt 자동 꺼짐"
+            lines += "음성 인식 중" + (if (Prefs.testMode) " · 테스트 모드" else "") + " · $offAt 자동 꺼짐"
         }
         if (currentTitle.isNotEmpty()) lines += "▶ 재생 중: $currentTitle"
         if (lines.isEmpty()) lines += "대기 중"
         val b = NotificationCompat.Builder(this, App.CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat)
+            .setSmallIcon(if (listening) R.drawable.ic_mic_stat else R.drawable.ic_stat)
             .setContentTitle(if (listening) "이놈아저씨 · 듣는 중" else "이놈아저씨")
             .setContentText(lines.joinToString("  "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
@@ -389,8 +395,8 @@ class ScareService : Service() {
             .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(open)
-        b.addAction(0, "⏹ 정지", pending(ACTION_STOP, 1))
-        if (listening) b.addAction(0, "🎙 인식 끄기", pending(ACTION_LISTEN_OFF, 2))
+        b.addAction(0, "정지", pending(ACTION_STOP, 1))
+        if (listening) b.addAction(0, "인식 끄기", pending(ACTION_LISTEN_OFF, 2))
         return b.build()
     }
 
@@ -418,6 +424,15 @@ class ScareService : Service() {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             cancelNoti()
             stopSelf()
+        }
+    }
+
+    /** 블루투스 재생이 끝나면, 음성 인식 중 꺼 두던 폰 미디어 소리를 다시 끔 */
+    fun remuteIfListening() {
+        if (listening && mutedStreams) {
+            try {
+                getSystemService(AudioManager::class.java).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+            } catch (_: Exception) {}
         }
     }
 
@@ -464,6 +479,8 @@ class ScareService : Service() {
         @Volatile var running: ScareService? = null; private set
         @Volatile var listening = false; private set
         @Volatile var currentTitle = ""; private set
+        /** 화면에 안내창으로 띄울 실패 이유 (한 번 보여주면 비움) */
+        @Volatile var lastError = ""
         /** 화면 갱신용 */
         var stateListener: (() -> Unit)? = null
 

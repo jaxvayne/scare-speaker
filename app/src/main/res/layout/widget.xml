@@ -15,7 +15,8 @@
         android:layout_weight="1"
         android:background="@drawable/widget_btn"
         android:gravity="center"
-        android:text="🎙 켜기"
+        android:text="음성 인식 켜기"
+        android:drawablePadding="6dp"
         android:textColor="#FFFFFF"
         android:textSize="15sp" />
 
@@ -26,7 +27,7 @@
         android:layout_weight="1"
         android:background="@drawable/widget_btn_dark"
         android:gravity="center"
-        android:text="⏹ 정지"
+        android:text="정지"
         android:textColor="#FFFFFF"
         android:textSize="15sp" />
 </LinearLayout>

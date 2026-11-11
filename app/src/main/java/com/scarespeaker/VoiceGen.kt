@@ -24,6 +24,11 @@ enum class Style(
     GROWL("거인 + 으르렁", 0.80f, 1.20f, 0.70, 1.2, 3.5, 0.32, 0.35, 1.2, 0.0, 0.0),
 }
 
+/** 추천 목소리가 이 폰에 없을 때 (구글 TTS 설치/업데이트 안내용) */
+class VoiceMissing(msg: String) : Exception(msg)
+
+const val GOOGLE_TTS = "com.google.android.tts"
+
 /** 폰 TTS로 음성 파일을 만든다. 외부 서버 없이 폰 안에서 처리. */
 class ClipGenerator(private val ctx: Context) {
 
@@ -38,7 +43,8 @@ class ClipGenerator(private val ctx: Context) {
             ok = status == TextToSpeech.SUCCESS
             latch.countDown()
         }
-        val engine = Prefs.ttsEngine
+        // 구글 음성(ko-kr-x-…)을 쓰면 기본 엔진이 삼성이라도 구글 엔진으로 만듦 → 어느 폰에서나 같은 목소리
+        val engine = Prefs.ttsEngine.ifEmpty { if (Prefs.ttsVoice.startsWith("ko-kr-x-")) GOOGLE_TTS else "" }
         val t = if (engine.isNotEmpty()) TextToSpeech(ctx.applicationContext, listener, engine)
         else TextToSpeech(ctx.applicationContext, listener)
         latch.await(15, TimeUnit.SECONDS)
@@ -48,9 +54,12 @@ class ClipGenerator(private val ctx: Context) {
             throw IllegalStateException("한국어 TTS 음성이 없어요 (설정 > 텍스트 음성 변환에서 한국어 음성 설치)")
         }
         if (Prefs.ttsVoice.isNotEmpty()) {
-            try {
-                t.voices?.firstOrNull { it.name == Prefs.ttsVoice }?.let { t.voice = it }
-            } catch (_: Exception) {}
+            val v = try { t.voices?.firstOrNull { it.name == Prefs.ttsVoice } } catch (_: Exception) { null }
+            if (v == null) {
+                t.shutdown()
+                throw VoiceMissing("이 폰에 추천 목소리(${Prefs.ttsVoice})가 없어요")
+            }
+            t.voice = v
         }
         t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) {}
