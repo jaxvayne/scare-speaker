@@ -135,7 +135,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(Ui.spacer(c, 12))
 
         // 상황 탭
-        tabRow = Ui.row(c)
+        tabRow = Ui.column(c)
         root.addView(tabRow)
         root.addView(Ui.spacer(c, 8))
         tabBody = Ui.column(c)
@@ -192,10 +192,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun rebuildTab() {
         tabRow.removeAllViews()
-        for (t in Scenario.tabs) {
-            tabRow.addView(Ui.smallButton(this, t.label, if (t.id == tab) Ui.RED else 0xFF3A3A46.toInt()) {
-                tab = t.id; rebuildTab()
-            }, LinearLayout.LayoutParams(0, Ui.dp(this, 48), 1f).apply { rightMargin = Ui.dp(this@MainActivity, 6) })
+        // 탭이 많으면 한 줄에 3개씩
+        for (chunk in Scenario.tabs.chunked(3)) {
+            val r = Ui.row(this)
+            for (t in chunk) {
+                r.addView(Ui.smallButton(this, t.label, if (t.id == tab) Ui.RED else 0xFF3A3A46.toInt()) {
+                    tab = t.id; rebuildTab()
+                }, LinearLayout.LayoutParams(0, Ui.dp(this, 46), 1f).apply {
+                    rightMargin = Ui.dp(this@MainActivity, 6); bottomMargin = Ui.dp(this@MainActivity, 6)
+                })
+            }
+            repeat(3 - chunk.size) { r.addView(android.view.View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
+            tabRow.addView(r)
         }
         tabBody.removeAllViews()
         val cat = Scenario.tabs.firstOrNull { it.id == tab } ?: return

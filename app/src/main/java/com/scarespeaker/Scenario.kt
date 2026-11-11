@@ -75,7 +75,7 @@ object Scenario {
 
     val commands: List<Command> get() = load().first
     val tabs: List<Category> get() = load().second
-    val version: Int get() = 3
+    val version: Int get() = 4
 
     fun byId(id: String): Command? = commands.firstOrNull { it.id == id }
     fun categoryLabel(id: String): String = when (id) {

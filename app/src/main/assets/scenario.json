@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "note": "대사와 키워드 정의. 안드로이드/아이폰 앱이 함께 쓸 수 있도록 데이터로 분리. match는 위에서부터 먼저 검사함. {role}=호칭, {name}=이름, {actor}=누가, {target}=누구(조사 없음), {target_obj}=누구를",
   "categories": [
     {
@@ -17,6 +17,10 @@
     {
       "id": "habit",
       "label": "🪥 생활습관"
+    },
+    {
+      "id": "wash",
+      "label": "🛁 씻기·옷"
     },
     {
       "id": "end",
@@ -130,6 +134,166 @@
       "tts_noname": [
         "누가 {target} 물건을 뺏니!",
         "얼른 돌려줘라!"
+      ]
+    },
+    {
+      "id": "LOTION",
+      "category": "wash",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 로션 안 발라요",
+      "match": [
+        "로션"
+      ],
+      "display": "이노옴~!! 누가 로션 안 바르니!! {name}! 로션 안 바르면 피부가 아야 한다!! 얼른 발라라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 로션 안 바르니!",
+        "{name}!",
+        "로션 안 바르면, 피부가 아야 한다!",
+        "얼른 발라라!"
+      ]
+    },
+    {
+      "id": "OINTMENT",
+      "category": "wash",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 약 안 발라요",
+      "match": [
+        "약안발라",
+        "약을안발라",
+        "약안바르",
+        "약바르기싫",
+        "약안발"
+      ],
+      "display": "이노옴~!! 누가 약 안 바르니!! {name}! 약 발라야 빨리 낫는다!! 얼른 발라라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 약 안 바르니!",
+        "{name}!",
+        "약 발라야, 빨리 낫는다!",
+        "얼른 발라라!"
+      ]
+    },
+    {
+      "id": "DIAPER",
+      "category": "wash",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 기저귀 안 입어요 / 안 해요",
+      "match": [
+        "기저귀"
+      ],
+      "display": "이노옴~!! 누가 기저귀 안 하니!! {name}! 기저귀 안 하면 이불에 쉬한다!! 얼른 해라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 기저귀 안 하니!",
+        "{name}!",
+        "기저귀 안 하면, 이불에 쉬한다!",
+        "얼른 해라!"
+      ]
+    },
+    {
+      "id": "PANTS",
+      "category": "wash",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 팬티 안 입어요",
+      "match": [
+        "팬티",
+        "빤쓰",
+        "빤스"
+      ],
+      "display": "이노옴~!! 누가 팬티 안 입니!! {name}! 얼른 팬티 입어라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 팬티 안 입니!",
+        "{name}!",
+        "얼른 팬티 입어라!"
+      ]
+    },
+    {
+      "id": "UNDRESS",
+      "category": "wash",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 옷 안 벗어요",
+      "match": [
+        "옷안벗",
+        "옷을안벗",
+        "옷벗기싫",
+        "옷안벗는"
+      ],
+      "display": "이노옴~!! 누가 옷 안 벗니!! {name}! 얼른 옷 벗어라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 옷 안 벗니!",
+        "{name}!",
+        "얼른 옷 벗어라!"
+      ]
+    },
+    {
+      "id": "DRESS",
+      "category": "wash",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 옷 안 입어요",
+      "match": [
+        "옷안입",
+        "옷을안입",
+        "옷입기싫",
+        "옷안입는"
+      ],
+      "display": "이노옴~!! 누가 옷 안 입니!! {name}! 감기 걸린다!! 얼른 옷 입어라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 옷 안 입니!",
+        "{name}!",
+        "감기 걸린다!",
+        "얼른 옷 입어라!"
+      ]
+    },
+    {
+      "id": "CAP",
+      "category": "wash",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 샤워캡 안 해요",
+      "match": [
+        "샤워캡",
+        "샤워모자"
+      ],
+      "display": "이노옴~!! 누가 샤워캡 안 하니!! {name}! 눈에 물 들어간다!! 얼른 써라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 샤워캡 안 하니!",
+        "{name}!",
+        "눈에 물 들어간다!",
+        "얼른 써라!"
+      ]
+    },
+    {
+      "id": "WASH",
+      "category": "wash",
+      "names": "single",
+      "role": false,
+      "keyword": "이놈아저씨 [이름] 안 씻어요 / 샤워 안 해요",
+      "match": [
+        "안씻",
+        "씻기싫",
+        "샤워안",
+        "샤워를안",
+        "샤워하기싫",
+        "목욕안"
+      ],
+      "display": "이노옴~!! 누가 안 씻니!! {name}! 안 씻으면 냄새나서 아저씨가 잡아간다!! 얼른 씻어라!!",
+      "call": "이노오오옴",
+      "tts": [
+        "누가 안 씻니!",
+        "{name}!",
+        "안 씻으면, 냄새나서 아저씨가 잡아간다!",
+        "얼른 씻어라!"
       ]
     },
     {
@@ -394,6 +558,19 @@
         "BRUSH",
         "TANTRUM",
         "WHINE"
+      ]
+    },
+    {
+      "category": "wash",
+      "order": [
+        "LOTION",
+        "OINTMENT",
+        "DIAPER",
+        "PANTS",
+        "DRESS",
+        "UNDRESS",
+        "CAP",
+        "WASH"
       ]
     }
   ]
